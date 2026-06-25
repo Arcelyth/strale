@@ -10,29 +10,70 @@ Strale combines:
 
 The type occupies **16 bytes** on 64-bit platforms.
 
+## Installation
+
+Add to your `build.zig.zon`:
+```zig
+    .dependencies = .{
+        .strale = .{ 
+            .url = "https://github.com/Arcelyth/strale/archive/refs/heads/main.tar.gz", 
+            .hash = "..." 
+        },
+    },
+```
+Add to your `build.zig`: 
+```zig
+    const strale = b.dependency("strale", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe_module.addImport("strale", strale.module("strale"));
+```
+
+
 ## Example
 
 ```zig
-var s1 = try Strale.initSlice(
-    testing.allocator,
-    "hello world",
-);
-defer s1.deinit();
+const std = @import("std");
+const strale = @import("strale");
+const Strale = strale.Strale;
 
-var s2 = s1.clone();
-defer s2.deinit();
+pub fn main() !void {
+    const alloc = std.heap.page_allocator;
 
-try s1.push(testing.allocator, '!');
+    // create string
+    var a = try Strale.initSlice(alloc, "hello");
+    defer a.deinit();
 
-try testing.expectEqualStrings(
-    "hello world!",
-    s1.slice(),
-);
+    var b = try Strale.initSlice(alloc, " world");
+    defer b.deinit();
 
-try testing.expectEqualStrings(
-    "hello world",
-    s2.slice(),
-);
+    // concat
+    var c = try a.concat(alloc, &b);
+    defer c.deinit();
+    std.debug.print("concat: {s}\n", .{c.slice()});
+
+    // substring
+    var sub = c.substr(6, 5);
+    defer sub.deinit();
+    std.debug.print("substr: {s}\n", .{sub.slice()});
+
+    // push
+    try sub.push(alloc, '!');
+    std.debug.print("after push: {s}\n", .{sub.slice()});
+
+    // pop
+    const ch = sub.pop();
+    std.debug.print("pop: {?c}\n", .{ch});
+    std.debug.print("after pop: {s}\n", .{sub.slice()});
+
+    // find
+    const idx = c.find("world");
+    std.debug.print("find 'world': {?}\n", .{idx});
+
+    // charAt
+    std.debug.print("charAt(1): {?c}\n", .{c.charAt(1)});
+}
 ```
 
 ## LICENSE

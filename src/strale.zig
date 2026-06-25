@@ -109,4 +109,50 @@ pub const Strale = struct {
             return base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + self.inner.remote_repr.len];
         }
     }
+
+    pub fn substr(self: *const Self, offset: comptime_int, len: comptime_int) Self {
+        const current = self.slice();
+
+        std.debug.assert(offset + len <= current.len);
+
+        if (len <= 15) {
+            const sub_src = current[offset .. offset + len];
+            var inline_res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(len << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            @memcpy(inline_res.inner.inline_repr.data[0..len], sub_src);
+            return inline_res;
+        }
+
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        header.ref_count += 1;
+        return Self{
+            .inner = .{
+                .remote_repr = .{
+                    .ptr = self.inner.remote_repr.ptr,
+                    .offset = self.inner.remote_repr.offset + offset,
+                    .len = len,
+                },
+            },
+        };
+    }
+
+    pub fn cow(self: *Self) !void {
+        if (self.isInline()) return;
+
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        if (header.ref_count == 1) return;
+
+        const current_data = self.slice();
+        const alloc = header.alloc;
+        const new_data = try Self.initSlice(alloc, current_data);
+
+        header.ref_count -= 1;
+        self.* = new_data;
+    }
 };

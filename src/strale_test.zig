@@ -89,10 +89,7 @@ test "clone heap string and ref count" {
         s2.slice(),
     );
 
-    try testing.expectEqual(
-        2,
-        s1.ref_count(),
-    );
+    try testing.expectEqual(2, s1.ref_count());
 }
 
 test "multiple clones" {
@@ -111,10 +108,7 @@ test "multiple clones" {
     defer s4.deinit();
 
     for ([4]Strale{ s1, s2, s3, s4 }) |s| {
-        try testing.expectEqual(
-            4,
-            s.ref_count(),
-        );
+        try testing.expectEqual(4, s.ref_count());
 
         try testing.expectEqualStrings(str, s.slice());
     }
@@ -128,17 +122,129 @@ test "clone then destroy clone" {
 
     var s2 = s1.clone();
 
-    try testing.expectEqual(
-        2,
-        s2.ref_count(),
-    );
+    try testing.expectEqual(2, s2.ref_count());
 
     s2.deinit();
 
-    try testing.expectEqual(
-        1,
-        s1.ref_count(),
-    );
+    try testing.expectEqual(1, s1.ref_count());
 
     try testing.expectEqualStrings(str, s1.slice());
+}
+
+// Substr tests
+test "substr inline to inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello world",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(0, 5);
+    defer sub.deinit();
+
+    try testing.expect(sub.isInline());
+    try testing.expectEqualStrings(
+        "hello",
+        sub.slice(),
+    );
+}
+
+test "substr heap to inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(5, 3);
+    defer sub.deinit();
+
+    try testing.expect(sub.isInline());
+    try testing.expectEqualStrings(
+        "fgh",
+        sub.slice(),
+    );
+}
+
+test "substr heap to heap" {
+    const text =
+        "abcdefghijklmnopqrstuvwxyz";
+
+    var s = try Strale.initSlice(
+        testing.allocator,
+        text,
+    );
+    defer s.deinit();
+
+    var sub = s.substr(5, 20);
+    defer sub.deinit();
+
+    try testing.expect(!sub.isInline());
+
+    try testing.expectEqualStrings(
+        text[5..25],
+        sub.slice(),
+    );
+
+    try testing.expectEqual(2, s.ref_count());
+}
+
+// COW tests
+test "cow unique allocation" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    const old_ptr = s.inner.remote_repr.ptr;
+
+    try s.cow();
+
+    try testing.expectEqual(
+        old_ptr,
+        s.inner.remote_repr.ptr,
+    );
+}
+
+test "cow shared allocation" {
+    var s1 = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s1.deinit();
+
+    var s2 = s1.clone();
+    defer s2.deinit();
+
+    const old_ptr = s1.inner.remote_repr.ptr;
+
+    try s1.cow();
+
+    try testing.expect(
+        s1.inner.remote_repr.ptr != old_ptr,
+    );
+
+    try testing.expectEqualStrings(
+        s1.slice(),
+        s2.slice(),
+    );
+}
+
+test "cow after shared substr" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(2, 20);
+    defer sub.deinit();
+
+    try sub.cow();
+
+    try testing.expectEqualStrings(
+        "cdefghijklmnopqrstuv",
+        sub.slice(),
+    );
 }

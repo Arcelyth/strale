@@ -475,3 +475,87 @@ test "charAt substring" {
 
     try testing.expectEqual('j', sub.charAt(4));
 }
+
+// Concat tests
+test "concat inline" {
+    var a = try Strale.initSlice(testing.allocator, "hello");
+    defer a.deinit();
+
+    var b = try Strale.initSlice(testing.allocator, "world");
+    defer b.deinit();
+
+    var c = try a.concat(testing.allocator, &b);
+    defer c.deinit();
+
+    try testing.expect(c.isInline());
+    try testing.expectEqualStrings("helloworld", c.slice());
+}
+
+test "concat heap" {
+    var a = try Strale.initSlice(testing.allocator, "hello");
+    defer a.deinit();
+
+    const long = " world world world world";
+
+    var b = try Strale.initSlice(testing.allocator, long);
+    defer b.deinit();
+
+    var c = try a.concat(testing.allocator, &b);
+    defer c.deinit();
+
+    try testing.expect(!c.isInline());
+    try testing.expectEqualStrings("hello world world world world", c.slice());
+}
+
+// Cmp tests
+test "cmp same heap slice fast path" {
+    var a = try Strale.initSlice(testing.allocator, "hello world");
+    defer a.deinit();
+
+    var b = a.clone();
+    defer b.deinit();
+
+    try testing.expectEqual(.eq, a.cmp(&b));
+}
+
+test "cmp inline equality" {
+    var a = try Strale.initSlice(testing.allocator, "abc");
+    defer a.deinit();
+
+    var b = try Strale.initSlice(testing.allocator, "abc");
+    defer b.deinit();
+
+    try testing.expectEqual(.eq, a.cmp(&b));
+}
+
+test "cmp ordering" {
+    var a = try Strale.initSlice(testing.allocator, "abc");
+    defer a.deinit();
+
+    var b = try Strale.initSlice(testing.allocator, "abd");
+    defer b.deinit();
+
+    try testing.expectEqual(.lt, a.cmp(&b));
+}
+
+// Find/rind tests
+test "find substring" {
+    var s = try Strale.initSlice(testing.allocator, "hello world");
+    defer s.deinit();
+
+    try testing.expectEqual(6, s.find("world"));
+}
+
+test "find missing" {
+    var s = try Strale.initSlice(testing.allocator, "hello");
+    defer s.deinit();
+
+    try testing.expectEqual(null, s.find("zzz"));
+}
+
+test "rfind multiple occurrences" {
+    var s = try Strale.initSlice(testing.allocator, "ababa");
+    defer s.deinit();
+
+    try testing.expectEqual(4, s.rfind("a"));
+}

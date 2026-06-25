@@ -332,7 +332,7 @@ pub const Strale = struct {
         }
     }
 
-    /// Remove the last character from the string and return it and 
+    /// Remove the last character from the string and return it and
     /// does not trigger copy-on-write. Return `null` if the string is empty.
     pub fn pop(self: *Self) ?u8 {
         if (self.isInline()) {
@@ -355,4 +355,74 @@ pub const Strale = struct {
         }
     }
 
+    /// Concatenate two strings and return a new `Strale` instance.
+    pub fn concat(self: *const Self, alloc: Allocator, other: *const Self) !Self {
+        const s1 = self.slice();
+        const s2 = other.slice();
+        const total_len = s1.len + s2.len;
+
+        if (total_len <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(total_len << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            @memcpy(res.inner.inline_repr.data[0..s1.len], s1);
+            @memcpy(res.inner.inline_repr.data[s1.len..total_len], s2);
+            return res;
+        } else {
+            const total_size = @sizeOf(Header) + total_len;
+            const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const header = @as(*Header, @ptrCast(bytes.ptr));
+
+            header.* = .{
+                .alloc = alloc,
+                .ref_count = 1,
+                .capacity = @intCast(total_len),
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..];
+            @memcpy(data_ptr[0..s1.len], s1);
+            @memcpy(data_ptr[s1.len..total_len], s2);
+
+            return Self{
+                .inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = @intCast(total_len),
+                    },
+                },
+            };
+        }
+    }
+
+    /// Compare two strings lexicographically.
+    pub fn cmp(self: *const Self, other: *const Self) std.math.Order {
+        if (!self.isInline() and !other.isInline()) {
+            if (self.inner.remote_repr.ptr == other.inner.remote_repr.ptr and
+                self.inner.remote_repr.offset == other.inner.remote_repr.offset and
+                self.inner.remote_repr.len == other.inner.remote_repr.len)
+            {
+                return .eq;
+            }
+        }
+
+        return mem.order(u8, self.slice(), other.slice());
+    }
+
+    /// Find the first occurrence of a substring (`needle`) within this string.
+    /// Returns the byte index of the match, or `null` if not found.
+    pub fn find(self: *const Self, needle: []const u8) ?usize {
+        return mem.indexOf(u8, self.slice(), needle);
+    }
+
+    /// Find the last occurrence of a substring (`needle`) within this string (Reverse Find).
+    /// Returns the byte index of the match, or `null` if not found.
+    pub fn rfind(self: *const Self, needle: []const u8) ?usize {
+        return mem.lastIndexOf(u8, self.slice(), needle);
+    }
 };

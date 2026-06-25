@@ -2,7 +2,14 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
 
+/// A compact string type with Small String Optimization (SSO).
+/// Strings up to 15 bytes are stored directly inside the object without
+/// heap allocation. Larger strings are stored in a reference-counted
+/// shared buffer.
 ///
+/// This type is not thread-safe as the ref_count field is not change
+/// atomic. You can use this type if you are using single thread or just
+/// small string.
 pub const Strale = struct {
     const Self = @This();
 
@@ -17,7 +24,6 @@ pub const Strale = struct {
 
     const Header = struct {
         alloc: Allocator,
-        // TODO: support atomic
         ref_count: u32,
         capacity: u32,
     };
@@ -26,6 +32,7 @@ pub const Strale = struct {
         return (self.inner.inline_repr.tag_and_len & 1) == 1;
     }
 
+    /// Create an empty string.
     pub fn initEmpty() Self {
         return Self{ .inner = .{ .inline_repr = .{
             .tag_and_len = 1,
@@ -33,6 +40,13 @@ pub const Strale = struct {
         } } };
     }
 
+    /// Create a string from the given byte slice.
+    ///
+    /// If the slice length is 15 bytes or less, the contents are copied
+    /// directly into the inline storage.
+    ///
+    /// For longer strings, a shared heap allocation is created containing
+    /// both a reference-counted header and the string data.
     pub fn initSlice(alloc: Allocator, src: []const u8) !Self {
         if (src.len <= 15) {
             var self = Self{
@@ -71,6 +85,12 @@ pub const Strale = struct {
         }
     }
 
+    /// Release the resources owned by this string.
+    ///
+    /// Inline strings require no cleanup.
+    ///
+    /// For remote strings, the reference count is decremented and the
+    /// backing allocation is freed when the count reaches zero.
     pub fn deinit(self: *Self) void {
         if (self.isInline()) return;
 
@@ -84,6 +104,7 @@ pub const Strale = struct {
         }
     }
 
+    /// Return the reference count if 'self' is not inline.
     pub fn ref_count(self: *const Self) ?u32 {
         if (self.isInline()) return null;
 
@@ -91,6 +112,20 @@ pub const Strale = struct {
         return header.ref_count;
     }
 
+    /// Create a new reference to this string.
+    ///
+    /// Inline strings are copied directly.
+    ///
+    /// Heap-backed strings share the same underlying allocation. The
+    /// allocation's reference count is incremented and the returned value
+    /// points to the same storage.
+    ///
+    /// The caller becomes responsible for eventually calling `deinit()`
+    /// on the returned string.
+    ///
+    /// Copying a `Strale` using plain assignment does not update the
+    /// reference count and may result in double-free errors. Use `clone()`
+    /// whenever an additional owned reference is required.
     pub fn clone(self: *const Self) Self {
         if (self.isInline()) return self.*;
 
@@ -99,6 +134,7 @@ pub const Strale = struct {
         return self.*;
     }
 
+    /// Return the string contents as a read-only byte slice.
     pub fn slice(self: *const Self) []const u8 {
         if (self.isInline()) {
             const length = self.inner.inline_repr.tag_and_len >> 1;
@@ -110,6 +146,13 @@ pub const Strale = struct {
         }
     }
 
+    /// Return a substring of this string.
+    ///
+    /// For substrings whose length is 15 bytes or less, the result is stored
+    /// inline and does not share storage with the original string.
+    ///
+    /// Longer substrings share the underlying allocation by incrementing the
+    /// reference count and adjusting the slice offset.
     pub fn substr(self: *const Self, offset: comptime_int, len: comptime_int) Self {
         const current = self.slice();
 
@@ -142,6 +185,16 @@ pub const Strale = struct {
         };
     }
 
+    /// Providing clone-on-write (COW) functionality.
+    ///
+    /// If the string is stored inline, no action is performed.
+    ///
+    /// If the string is heap-allocated and shared by multiple instances,
+    /// a new allocation is created and the current contents are copied into it.
+    ///
+    /// After this call returns successfully, any heap-backed string is
+    /// guaranteed to have a reference count of one and may be safely modified
+    /// in-place by internal mutation routines.
     pub fn cow(self: *Self) !void {
         if (self.isInline()) return;
 

@@ -1,8 +1,9 @@
 const std = @import("std");
+const mem = std.mem;
 const Allocator = std.mem.Allocator;
 
 ///
-const Strale = struct {
+pub const Strale = struct {
     const Self = @This();
 
     inner: extern union { inline_repr: extern struct {
@@ -16,11 +17,12 @@ const Strale = struct {
 
     const Header = struct {
         alloc: Allocator,
+        // TODO: support atomic
         ref_count: u32,
         capacity: u32,
     };
 
-    inline fn isInline(self: *const Self) bool {
+    pub inline fn isInline(self: *const Self) bool {
         return (self.inner.inline_repr.tag_and_len & 1) == 1;
     }
 
@@ -45,7 +47,7 @@ const Strale = struct {
             return self;
         } else {
             const total_size = @sizeOf(Header) + src.len;
-            const bytes = try alloc.allocWithOptions(u8, total_size, @alignOf(Header), null);
+            const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
             const header = @as(*Header, @ptrCast(bytes.ptr));
 
             header.* = .{
@@ -77,8 +79,34 @@ const Strale = struct {
         if (header.ref_count == 0) {
             const total_size = @sizeOf(Header) + header.capacity;
             const alloc = header.alloc;
-            const bytes = @as([*]u8, @ptrCast(header))[0..total_size];
+            const bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..total_size];
             alloc.free(bytes);
+        }
+    }
+
+    pub fn ref_count(self: *const Self) ?u32 {
+        if (self.isInline()) return null;
+
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        return header.ref_count;
+    }
+
+    pub fn clone(self: *const Self) Self {
+        if (self.isInline()) return self.*;
+
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        header.ref_count += 1;
+        return self.*;
+    }
+
+    pub fn slice(self: *const Self) []const u8 {
+        if (self.isInline()) {
+            const length = self.inner.inline_repr.tag_and_len >> 1;
+            return self.inner.inline_repr.data[0..length];
+        } else {
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+            const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            return base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + self.inner.remote_repr.len];
         }
     }
 };

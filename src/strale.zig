@@ -12,6 +12,8 @@ const Allocator = std.mem.Allocator;
 /// small string.
 pub const Strale = struct {
     const Self = @This();
+    const init_capacity = 32;
+    const cap_factor = 2;
 
     inner: extern union { inline_repr: extern struct {
         tag_and_len: u8,
@@ -207,5 +209,90 @@ pub const Strale = struct {
 
         header.ref_count -= 1;
         self.* = new_data;
+    }
+
+    /// Append a single character to the string.
+    ///
+    /// If the string is inline and has room, it writes directly.
+    /// If it needs to grow or trigger COW, it expands geometrically (doubling capacity 
+    /// by default) to maintain high performance for consecutive pushes.
+    pub fn push(self: *Self, alloc: Allocator, char: u8) !void {
+        if (self.isInline()) {
+            const current_len = self.inner.inline_repr.tag_and_len >> 1;
+
+            if (current_len < 15) {
+                self.inner.inline_repr.data[current_len] = char;
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len + 1) << 1)) | 1;
+                return;
+            } else {
+                const new_capacity = init_capacity;
+                const total_size = @sizeOf(Header) + new_capacity;
+                const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                header.* = .{
+                    .alloc = alloc,
+                    .ref_count = 1,
+                    .capacity = new_capacity,
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                @memcpy(data_ptr[0..15], self.inner.inline_repr.data[0..15]);
+                data_ptr[15] = char;
+
+                self.inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = 16,
+                    },
+                };
+                return;
+            }
+        }
+
+        const current_len = self.inner.remote_repr.len;
+        const current_offset = self.inner.remote_repr.offset;
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+
+        // not shared
+        if (header.ref_count == 1 and (current_offset + current_len) < header.capacity) {
+            const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            base_data_ptr[current_offset + current_len] = char;
+            self.inner.remote_repr.len += 1;
+        } else {
+            // shared
+            const old_alloc = header.alloc;
+            const current_slice = self.slice();
+
+            const new_capacity = @max((current_len + 1) * cap_factor, @as(u32, 32));
+            const total_size = @sizeOf(Header) + new_capacity;
+
+            const bytes = try old_alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const new_header = @as(*Header, @ptrCast(bytes.ptr));
+
+            new_header.* = .{
+                .alloc = old_alloc,
+                .ref_count = 1,
+                .capacity = new_capacity,
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..];
+            @memcpy(data_ptr[0..current_len], current_slice);
+            data_ptr[current_len] = char;
+
+            header.ref_count -= 1;
+            if (header.ref_count == 0) {
+                const old_total_size = @sizeOf(Header) + header.capacity;
+                const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
+                old_alloc.free(old_bytes);
+            }
+
+            self.inner.remote_repr = .{
+                .ptr = @intFromPtr(new_header),
+                .offset = 0,
+                .len = current_len + 1,
+            };
+        }
     }
 };

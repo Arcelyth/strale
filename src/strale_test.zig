@@ -248,3 +248,97 @@ test "cow after shared substr" {
         sub.slice(),
     );
 }
+
+// Push test
+test "push inline" {
+    var s = Strale.initEmpty();
+    defer s.deinit();
+
+    try s.push(testing.allocator, 'a');
+    try s.push(testing.allocator, 'b');
+    try s.push(testing.allocator, 'c');
+
+    try testing.expect(s.isInline());
+    try testing.expectEqualStrings(
+        "abc",
+        s.slice(),
+    );
+}
+
+test "push converts inline to heap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "123456789abcdef",
+    );
+    defer s.deinit();
+
+    try testing.expect(s.isInline());
+    try s.push(testing.allocator, 'g');
+
+    try testing.expect(!s.isInline());
+    try testing.expectEqualStrings(
+        "123456789abcdefg",
+        s.slice(),
+    );
+}
+
+test "push heap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "123456789abcdefg",
+    );
+    defer s.deinit();
+
+    try s.push(testing.allocator, 'h');
+
+    try testing.expectEqualStrings(
+        "123456789abcdefgh",
+        s.slice(),
+    );
+}
+
+test "push triggers cow" {
+    var s1 = try Strale.initSlice(
+        testing.allocator,
+        "hello world hello world",
+    );
+    defer s1.deinit();
+
+    var s2 = s1.clone();
+    defer s2.deinit();
+
+    try s1.push(testing.allocator, '!');
+
+    try testing.expectEqualStrings(
+        "hello world hello world!",
+        s1.slice(),
+    );
+
+    try testing.expectEqualStrings(
+        "hello world hello world",
+        s2.slice(),
+    );
+}
+
+test "push after substring" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(10, 10);
+    defer sub.deinit();
+
+    try sub.push(testing.allocator, 'X');
+
+    try testing.expectEqualStrings(
+        "klmnopqrstX",
+        sub.slice(),
+    );
+
+    try testing.expectEqualStrings(
+        "abcdefghijklmnopqrstuvwxyz",
+        s.slice(),
+    );
+}

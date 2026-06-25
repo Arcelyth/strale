@@ -114,6 +114,42 @@ pub const Strale = struct {
         return header.ref_count;
     }
 
+    // Return string's length.
+    pub inline fn len(self: *const Self) usize {
+        if (self.isInline()) {
+            return self.inner.inline_repr.tag_and_len >> 1;
+        } else {
+            return self.inner.remote_repr.len;
+        }
+    }
+
+    // Return string's capacity if 'self' is not inline.
+    pub fn cap(self: *const Self) ?usize {
+        if (self.isInline()) return null;
+
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        return header.capacity;
+    }
+
+    // Return the character at specific position.
+    // Return null if string is empty.
+    pub fn charAt(self: *const Self, pos: usize) ?u8 {
+        if (self.isInline()) {
+            const cur_len = self.inner.inline_repr.tag_and_len >> 1;
+            if (pos >= cur_len) return null;
+            return self.inner.inline_repr.data[pos];
+        } else {
+            if (pos >= self.inner.remote_repr.len) return null;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+            const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            return base_data_ptr[self.inner.remote_repr.offset + pos];
+        }
+    }
+
+    pub fn isEmpty(self: *const Self) bool {
+        return self.len() == 0;
+    }
+
     /// Create a new reference to this string.
     ///
     /// Inline strings are copied directly.
@@ -155,22 +191,22 @@ pub const Strale = struct {
     ///
     /// Longer substrings share the underlying allocation by incrementing the
     /// reference count and adjusting the slice offset.
-    pub fn substr(self: *const Self, offset: comptime_int, len: comptime_int) Self {
+    pub fn substr(self: *const Self, offset: comptime_int, length: comptime_int) Self {
         const current = self.slice();
 
-        std.debug.assert(offset + len <= current.len);
+        std.debug.assert(offset + length <= current.len);
 
-        if (len <= 15) {
-            const sub_src = current[offset .. offset + len];
+        if (length <= 15) {
+            const sub_src = current[offset .. offset + length];
             var inline_res = Self{
                 .inner = .{
                     .inline_repr = .{
-                        .tag_and_len = @as(u8, @intCast(len << 1)) | 1,
+                        .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
                         .data = undefined,
                     },
                 },
             };
-            @memcpy(inline_res.inner.inline_repr.data[0..len], sub_src);
+            @memcpy(inline_res.inner.inline_repr.data[0..length], sub_src);
             return inline_res;
         }
 
@@ -181,7 +217,7 @@ pub const Strale = struct {
                 .remote_repr = .{
                     .ptr = self.inner.remote_repr.ptr,
                     .offset = self.inner.remote_repr.offset + offset,
-                    .len = len,
+                    .len = length,
                 },
             },
         };
@@ -214,7 +250,7 @@ pub const Strale = struct {
     /// Append a single character to the string.
     ///
     /// If the string is inline and has room, it writes directly.
-    /// If it needs to grow or trigger COW, it expands geometrically (doubling capacity 
+    /// If it needs to grow or trigger COW, it expands geometrically (doubling capacity
     /// by default) to maintain high performance for consecutive pushes.
     pub fn push(self: *Self, alloc: Allocator, char: u8) !void {
         if (self.isInline()) {
@@ -295,4 +331,28 @@ pub const Strale = struct {
             };
         }
     }
+
+    /// Remove the last character from the string and return it and 
+    /// does not trigger copy-on-write. Return `null` if the string is empty.
+    pub fn pop(self: *Self) ?u8 {
+        if (self.isInline()) {
+            const current_len = self.inner.inline_repr.tag_and_len >> 1;
+            if (current_len == 0) return null;
+
+            const char = self.inner.inline_repr.data[current_len - 1];
+            self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len - 1) << 1)) | 1;
+            return char;
+        } else {
+            const current_len = self.inner.remote_repr.len;
+            if (current_len == 0) return null;
+
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+            const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            const char = base_data_ptr[self.inner.remote_repr.offset + current_len - 1];
+
+            self.inner.remote_repr.len -= 1;
+            return char;
+        }
+    }
+
 };

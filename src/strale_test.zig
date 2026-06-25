@@ -249,7 +249,7 @@ test "cow after shared substr" {
     );
 }
 
-// Push test
+// Push tests
 test "push inline" {
     var s = Strale.initEmpty();
     defer s.deinit();
@@ -341,4 +341,137 @@ test "push after substring" {
         "abcdefghijklmnopqrstuvwxyz",
         s.slice(),
     );
+}
+
+// Pop tests
+test "pop inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abc",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('c', s.pop());
+    try testing.expectEqualStrings("ab", s.slice());
+}
+
+test "pop heap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('z', s.pop());
+    try testing.expectEqual(25, s.len());
+}
+
+test "pop until empty" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abc",
+    );
+    defer s.deinit();
+
+    _ = s.pop();
+    _ = s.pop();
+    _ = s.pop();
+
+    try testing.expect(s.isEmpty());
+    try testing.expectEqual(null, s.pop());
+}
+
+test "pop substring" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(5, 5);
+    defer sub.deinit();
+
+    _ = sub.pop();
+
+    try testing.expectEqualStrings("fghi", sub.slice());
+    try testing.expectEqualStrings(
+        "abcdefghijklmnopqrstuvwxyz",
+        s.slice(),
+    );
+}
+
+test "empty string" {
+    var s = Strale.initEmpty();
+    defer s.deinit();
+
+    try testing.expect(s.isEmpty());
+    try testing.expectEqual(0, s.len());
+    try testing.expectEqual(null, s.pop());
+}
+
+test "inline len" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual(5, s.len());
+}
+
+test "heap len" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual(26, s.len());
+}
+
+test "inline cap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual(null, s.cap());
+}
+
+test "heap cap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try testing.expect(s.cap().? >= s.len());
+}
+
+test "charAt inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('h', s.charAt(0));
+    try testing.expectEqual('o', s.charAt(4));
+    try testing.expectEqual(null, s.charAt(5));
+}
+
+test "charAt substring" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    var sub = s.substr(5, 5);
+    defer sub.deinit();
+
+    try testing.expectEqual('f', sub.charAt(0));
+
+    try testing.expectEqual('j', sub.charAt(4));
 }

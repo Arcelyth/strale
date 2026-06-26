@@ -773,10 +773,7 @@ test "repeat inline" {
     );
     defer s.deinit();
 
-    var r = try s.repeat(
-        testing.allocator,
-        3,
-    );
+    var r = try s.repeat(testing.allocator, 3);
     defer r.deinit();
 
     try testing.expect(r.isInline());
@@ -793,15 +790,66 @@ test "repeat heap" {
     );
     defer s.deinit();
 
-    var r = try s.repeat(
-        testing.allocator,
-        4,
-    );
+    var r = try s.repeat(testing.allocator, 4);
     defer r.deinit();
 
     try testing.expect(!r.isInline());
     try testing.expectEqualStrings(
         "abcdefabcdefabcdefabcdef",
         r.slice(),
+    );
+}
+
+test "toLowercase" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "HELLO World 123",
+    );
+    defer s.deinit();
+
+    var lower = try s.toLowercase(
+        testing.allocator,
+    );
+    defer lower.deinit();
+
+    try testing.expectEqualStrings(
+        "hello world 123",
+        lower.slice(),
+    );
+}
+
+test "toUppercase" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello World 123",
+    );
+    defer s.deinit();
+
+    var upper = try s.toUppercase(
+        testing.allocator,
+    );
+    defer upper.deinit();
+
+    try testing.expectEqualStrings(
+        "HELLO WORLD 123",
+        upper.slice(),
+    );
+}
+
+test "toCapitalized" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hELLo WoRLD",
+    );
+    defer s.deinit();
+
+    var cap = try s.toCapitalized(
+        testing.allocator,
+    );
+    defer cap.deinit();
+
+    try testing.expectEqualStrings(
+        "Hello world",
+        cap.slice(),
     );
 }

@@ -652,4 +652,142 @@ pub const Strale = struct {
             };
         }
     }
+
+    /// Convert all ASCII characters to lowercase.
+    pub fn toLowercase(self: *const Self, alloc: Allocator) !Self {
+        const src = self.slice();
+        const length = src.len;
+
+        if (length <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            for (src, 0..) |c, i| {
+                res.inner.inline_repr.data[i] = std.ascii.toLower(c);
+            }
+            return res;
+        }
+
+        const total_size = @sizeOf(Header) + length;
+        const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+        const header = @as(*Header, @ptrCast(bytes.ptr));
+        header.* = .{
+            .alloc = alloc,
+            .ref_count = 1,
+            .capacity = @intCast(length),
+        };
+
+        const data_ptr = bytes[@sizeOf(Header)..][0..length];
+        for (src, 0..) |c, i| {
+            data_ptr[i] = std.ascii.toLower(c);
+        }
+
+        return Self{
+            .inner = .{
+                .remote_repr = .{
+                    .ptr = @intFromPtr(header),
+                    .offset = 0,
+                    .len = @intCast(length),
+                },
+            },
+        };
+    }
+
+    /// Convert all ASCII characters to uppercase.
+    pub fn toUppercase(self: *const Self, alloc: Allocator) !Self {
+        const src = self.slice();
+        const length = src.len;
+
+        if (length <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            for (src, 0..) |c, i| {
+                res.inner.inline_repr.data[i] = std.ascii.toUpper(c);
+            }
+            return res;
+        }
+
+        const total_size = @sizeOf(Header) + length;
+        const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+        const header = @as(*Header, @ptrCast(bytes.ptr));
+        header.* = .{
+            .alloc = alloc,
+            .ref_count = 1,
+            .capacity = @intCast(length),
+        };
+
+        const data_ptr = bytes[@sizeOf(Header)..][0..length];
+        for (src, 0..) |c, i| {
+            data_ptr[i] = std.ascii.toUpper(c);
+        }
+
+        return Self{
+            .inner = .{
+                .remote_repr = .{
+                    .ptr = @intFromPtr(header),
+                    .offset = 0,
+                    .len = @intCast(length),
+                },
+            },
+        };
+    }
+
+    /// Convert the first ASCII character to uppercase and all
+    /// remaining ASCII characters to lowercase.
+    pub fn toCapitalized(self: *const Self, alloc: Allocator) !Self {
+        const src = self.slice();
+        const length = src.len;
+
+        if (length <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            res.inner.inline_repr.data[0] = std.ascii.toUpper(src[0]);
+            for (src[1..], 1..) |c, i| {
+                res.inner.inline_repr.data[i] = std.ascii.toLower(c);
+            }
+            return res;
+        }
+
+        const total_size = @sizeOf(Header) + length;
+        const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+        const header = @as(*Header, @ptrCast(bytes.ptr));
+        header.* = .{
+            .alloc = alloc,
+            .ref_count = 1,
+            .capacity = @intCast(length),
+        };
+
+        const data_ptr = bytes[@sizeOf(Header)..][0..length];
+        data_ptr[0] = std.ascii.toUpper(src[0]);
+        for (src[1..], 1..) |c, i| {
+            data_ptr[i] = std.ascii.toLower(c);
+        }
+
+        return Self{
+            .inner = .{
+                .remote_repr = .{
+                    .ptr = @intFromPtr(header),
+                    .offset = 0,
+                    .len = @intCast(length),
+                },
+            },
+        };
+    }
 };

@@ -523,65 +523,133 @@ pub const Strale = struct {
     ///
     /// The iterator owns one cloned reference to the original string.
     /// Call `deinit()` after iteration to release that reference.
-    pub const SplitIterator = struct {
-        owner: Self,
-        iter: mem.SplitIterator(u8, .sequence),
+    pub fn SplitIterator(comptime T: type) type {
+        return struct {
+            owner: Self,
+            iter: T,
 
-        /// Return the first substring.
-        ///
-        /// This resets the iterator to the beginning and returns the first element.
-        pub fn first(self: *SplitIterator) Self {
-            const sub = self.iter.first();
-            return self.owner.fromSubSlice(sub);
-        }
+            /// Return the first substring.
+            ///
+            /// This resets the iterator to the beginning and returns the first element.
+            pub fn first(self: *SplitIterator(T)) Self {
+                const sub = self.iter.first();
+                return self.owner.fromSubSlice(sub);
+            }
 
-        /// Advance the iterator and return the next substring.
-        ///
-        /// Return `null` when all substrings have been consumed.
-        pub fn next(self: *SplitIterator) ?Self {
-            const sub = self.iter.next() orelse return null;
-            return self.owner.fromSubSlice(sub);
-        }
+            /// Advance the iterator and return the next substring.
+            ///
+            /// Return `null` when all substrings have been consumed.
+            pub fn next(self: *SplitIterator(T)) ?Self {
+                const sub = self.iter.next() orelse return null;
+                return self.owner.fromSubSlice(sub);
+            }
 
-        /// Return the next substring without advancing the iterator.
-        ///
-        /// Return `null` if no more substrings remain.
-        pub fn peek(self: *SplitIterator) ?Self {
-            const sub = self.iter.peek() orelse return null;
-            return self.owner.fromSubSlice(sub);
-        }
+            /// Return the next substring without advancing the iterator.
+            ///
+            /// Return `null` if no more substrings remain.
+            pub fn peek(self: *SplitIterator(T)) ?Self {
+                const sub = self.iter.peek() orelse return null;
+                return self.owner.fromSubSlice(sub);
+            }
 
-        /// Reset the iterator back to the beginning.
-        pub fn reset(self: *SplitIterator) void {
-            self.iter.reset();
-        }
+            /// Reset the iterator back to the beginning.
+            pub fn reset(self: *SplitIterator(T)) void {
+                self.iter.reset();
+            }
 
-        /// Return the remaining portion of the string without further splitting.
-        ///
-        /// The returned string shares the original storage whenever possible.
-        pub fn rest(self: SplitIterator) Self {
-            const sub = self.iter.rest();
-            return self.owner.fromSubSlice(sub);
-        }
+            /// Return the remaining portion of the string without further splitting.
+            ///
+            /// The returned string shares the original storage whenever possible.
+            pub fn rest(self: SplitIterator(T)) Self {
+                const sub = self.iter.rest();
+                return self.owner.fromSubSlice(sub);
+            }
 
-        /// Release the iterator's internal reference to the original string.
-        ///
-        /// This must be called after the iterator is no longer needed.
-        pub fn deinit(self: *SplitIterator) void {
-            self.owner.deinit();
-        }
-    };
+            /// Release the iterator's internal reference to the original string.
+            ///
+            /// This must be called after the iterator is no longer needed.
+            pub fn deinit(self: *SplitIterator(T)) void {
+                self.owner.deinit();
+            }
+        };
+    }
+
+    pub const SplitSeqIterator = SplitIterator(mem.SplitIterator(u8, .sequence));
+    pub const SplitLineIterator = SplitIterator(mem.SplitIterator(u8, .scalar));
 
     /// Return a standard Zig split iterator yielding byte slices.
     pub fn split(self: *const Self, delimiter: []const u8) mem.SplitIterator(u8, .sequence) {
-        return mem.splitSequence(self.slice(), delimiter);
+        return mem.splitSequence(u8, self.slice(), delimiter);
     }
 
     /// Return an iterator yielding `Strale` substrings.
-    pub fn splitToStrale(self: *Self, delimiter: []const u8) SplitIterator {
-        return SplitIterator{
+    pub fn splitToStrale(self: *const Self, delimiter: []const u8) SplitSeqIterator {
+        return SplitSeqIterator{
             .owner = self.clone(),
             .iter = mem.splitSequence(u8, self.slice(), delimiter),
         };
+    }
+
+    /// Return a standard Zig split iterator over the lines of a string.
+    pub fn lines(self: *const Self) mem.SplitIterator(u8, .scalar) {
+        return mem.splitScalar(u8, self.slice(), '\n');
+    }
+
+    /// Return an iterator over the lines of a string.
+    pub fn linesToStrale(self: *const Self) SplitLineIterator {
+        return SplitLineIterator{
+            .owner = self.clone(),
+            .iter = mem.splitScalar(u8, self.slice(), '\n'),
+        };
+    }
+
+    /// Return a new string consisting of this string repeated `n` times.
+    pub fn repeat(self: *const Self, alloc: Allocator, n: usize) !Self {
+        const src = self.slice();
+        if (n == 0 or src.len == 0) return initEmpty();
+
+        const total_len = src.len * n;
+
+        if (total_len <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(total_len << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            var i: usize = 0;
+            while (i < n) : (i += 1) {
+                @memcpy(res.inner.inline_repr.data[i * src.len .. (i + 1) * src.len], src);
+            }
+            return res;
+        } else {
+            const total_size = @sizeOf(Header) + total_len;
+            const bytes = try alloc.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const header = @as(*Header, @ptrCast(bytes.ptr));
+
+            header.* = .{
+                .alloc = alloc,
+                .ref_count = 1,
+                .capacity = @intCast(total_len),
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..];
+            var i: usize = 0;
+            while (i < n) : (i += 1) {
+                @memcpy(data_ptr[i * src.len .. (i + 1) * src.len], src);
+            }
+
+            return Self{
+                .inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = @intCast(total_len),
+                    },
+                },
+            };
+        }
     }
 };

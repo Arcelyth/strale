@@ -650,7 +650,7 @@ test "reverse heap" {
     );
 }
 
-test "split iterator" {
+test "splitToStrale iterator" {
     var s = try Strale.initSlice(
         testing.allocator,
         "one,two,three,four",
@@ -730,4 +730,78 @@ test "split iterator" {
     );
 
     try testing.expect(iter.next() == null);
+}
+
+test "linesToStrale iterator" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "line1\nline2\nline3",
+    );
+    defer s.deinit();
+
+    var iter = s.linesToStrale();
+    defer iter.deinit();
+
+    var line1 = iter.next().?;
+    defer line1.deinit();
+    try testing.expectEqualStrings(
+        "line1",
+        line1.slice(),
+    );
+
+    var line2 = iter.next().?;
+    defer line2.deinit();
+    try testing.expectEqualStrings(
+        "line2",
+        line2.slice(),
+    );
+
+    var line3 = iter.next().?;
+    defer line3.deinit();
+    try testing.expectEqualStrings(
+        "line3",
+        line3.slice(),
+    );
+
+    try testing.expect(iter.next() == null);
+}
+
+test "repeat inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "ab",
+    );
+    defer s.deinit();
+
+    var r = try s.repeat(
+        testing.allocator,
+        3,
+    );
+    defer r.deinit();
+
+    try testing.expect(r.isInline());
+    try testing.expectEqualStrings(
+        "ababab",
+        r.slice(),
+    );
+}
+
+test "repeat heap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdef",
+    );
+    defer s.deinit();
+
+    var r = try s.repeat(
+        testing.allocator,
+        4,
+    );
+    defer r.deinit();
+
+    try testing.expect(!r.isInline());
+    try testing.expectEqualStrings(
+        "abcdefabcdefabcdefabcdef",
+        r.slice(),
+    );
 }

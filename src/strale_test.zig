@@ -507,35 +507,35 @@ test "concat heap" {
     try testing.expectEqualStrings("hello world world world world", c.slice());
 }
 
-// Cmp tests
-test "cmp same heap slice fast path" {
+// Order tests
+test "order same heap slice fast path" {
     var a = try Strale.initSlice(testing.allocator, "hello world");
     defer a.deinit();
 
     var b = a.clone();
     defer b.deinit();
 
-    try testing.expectEqual(.eq, a.cmp(&b));
+    try testing.expectEqual(.eq, a.order(&b));
 }
 
-test "cmp inline equality" {
+test "order inline equality" {
     var a = try Strale.initSlice(testing.allocator, "abc");
     defer a.deinit();
 
     var b = try Strale.initSlice(testing.allocator, "abc");
     defer b.deinit();
 
-    try testing.expectEqual(.eq, a.cmp(&b));
+    try testing.expectEqual(.eq, a.order(&b));
 }
 
-test "cmp ordering" {
+test "order ordering" {
     var a = try Strale.initSlice(testing.allocator, "abc");
     defer a.deinit();
 
     var b = try Strale.initSlice(testing.allocator, "abd");
     defer b.deinit();
 
-    try testing.expectEqual(.lt, a.cmp(&b));
+    try testing.expectEqual(.lt, a.order(&b));
 }
 
 // Find/rind tests
@@ -558,4 +558,94 @@ test "rfind multiple occurrences" {
     defer s.deinit();
 
     try testing.expectEqual(4, s.rfind("a"));
+}
+
+// Trims' tests
+test "trimStart" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "   hello",
+    );
+    defer s.deinit();
+
+    var t = s.trimStart(null);
+    defer t.deinit();
+
+    try testing.expectEqualStrings("hello", t.slice());
+}
+
+test "trimEnd" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello   ",
+    );
+    defer s.deinit();
+
+    var t = s.trimEnd(null);
+    defer t.deinit();
+
+    try testing.expectEqualStrings("hello", t.slice());
+}
+
+test "trim" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "   hello   ",
+    );
+    defer s.deinit();
+
+    var t = s.trim(null);
+    defer t.deinit();
+
+    try testing.expectEqualStrings("hello", t.slice());
+}
+
+test "trim custom pattern" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "***hello***",
+    );
+    defer s.deinit();
+
+    var t = s.trim("***");
+    defer t.deinit();
+
+    try testing.expectEqualStrings("hello", t.slice());
+}
+
+test "count" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abababa",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual(3, s.count("ab"));
+}
+
+test "reverse inline" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "hello",
+    );
+    defer s.deinit();
+
+    try s.reverse();
+
+    try testing.expectEqualStrings("olleh", s.slice());
+}
+
+test "reverse heap" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try s.reverse();
+
+    try testing.expectEqualStrings(
+        "zyxwvutsrqponmlkjihgfedcba",
+        s.slice(),
+    );
 }

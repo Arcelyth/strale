@@ -401,7 +401,7 @@ pub const Strale = struct {
     }
 
     /// Compare two strings lexicographically.
-    pub fn cmp(self: *const Self, other: *const Self) std.math.Order {
+    pub fn order(self: *const Self, other: *const Self) std.math.Order {
         if (!self.isInline() and !other.isInline()) {
             if (self.inner.remote_repr.ptr == other.inner.remote_repr.ptr and
                 self.inner.remote_repr.offset == other.inner.remote_repr.offset and
@@ -414,6 +414,13 @@ pub const Strale = struct {
         return mem.order(u8, self.slice(), other.slice());
     }
 
+    pub fn cmp(self: *const Self, other: *const Self) bool {
+        switch (self.order(other)) {
+            .eq => return true,
+            else => return false,
+        }
+    }
+
     /// Find the first occurrence of a substring (`needle`) within this string.
     /// Returns the byte index of the match, or `null` if not found.
     pub fn find(self: *const Self, needle: []const u8) ?usize {
@@ -424,5 +431,87 @@ pub const Strale = struct {
     /// Returns the byte index of the match, or `null` if not found.
     pub fn rfind(self: *const Self, needle: []const u8) ?usize {
         return mem.lastIndexOf(u8, self.slice(), needle);
+    }
+
+    fn fromSubSlice(self: *const Self, sub: []const u8) Self {
+        const original = self.slice();
+        const length = sub.len;
+
+        if (length <= 15) {
+            var res = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                        .data = undefined,
+                    },
+                },
+            };
+            @memcpy(res.inner.inline_repr.data[0..length], sub);
+            return res;
+        }
+
+        const offset_diff = @intFromPtr(sub.ptr) - @intFromPtr(original.ptr);
+        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+        header.ref_count += 1;
+
+        return Self{
+            .inner = .{
+                .remote_repr = .{
+                    .ptr = self.inner.remote_repr.ptr,
+                    .offset = self.inner.remote_repr.offset + @as(u32, @intCast(offset_diff)),
+                    .len = @as(u32, @intCast(length)),
+                },
+            },
+        };
+    }
+
+    /// Return a new string with all leading bytes matching `pat` removed.
+    ///
+    /// If `pat` is `null`, ASCII whitespace (`" \t\r\n"`) is trimmed.
+    pub fn trimStart(self: *const Self, pat: ?[]const u8) Self {
+        const p = if (pat) |pat_v| pat_v else " \t\r\n";
+        return self.fromSubSlice(mem.trimStart(u8, self.slice(), p));
+    }
+
+    /// Return a new string with all trailing bytes matching `pat` removed.
+    ///
+    /// If `pat` is `null`, ASCII whitespace (`" \t\r\n"`) is trimmed.
+    pub fn trimEnd(self: *const Self, pat: ?[]const u8) Self {
+        const p = if (pat) |pat_v| pat_v else " \t\r\n";
+        return self.fromSubSlice(mem.trimEnd(u8, self.slice(), p));
+    }
+
+    /// Return a new string with leading and trailing bytes matching `pat` removed.
+    ///
+    /// If `pat` is `null`, ASCII whitespace (`" \t\r\n"`) is trimmed.
+    pub fn trim(self: *const Self, pat: ?[]const u8) Self {
+        const p = if (pat) |pat_v| pat_v else " \t\r\n";
+        return self.fromSubSlice(mem.trim(u8, self.slice(), p));
+    }
+
+    /// Count the total occurrences of a substring (`needle`) within this string.
+    pub fn count(self: *const Self, needle: []const u8) usize {
+        return mem.count(u8, self.slice(), needle);
+    }
+
+    /// Reverse the string contents in-place.
+    ///
+    /// If the string is inline, it mutates local bytes directly.
+    /// If it is a shared remote string, it safely triggers COW (Copy-On-Write)
+    /// using its internal allocator before reversing.
+    pub fn reverse(self: *Self) !void {
+        if (self.isInline()) {
+            const inline_len = self.inner.inline_repr.tag_and_len >> 1;
+            if (inline_len <= 1) return;
+            mem.reverse(u8, self.inner.inline_repr.data[0..inline_len]);
+        } else {
+            try self.cow();
+
+            if (self.inner.remote_repr.len <= 1) return;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+            const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            const mutable_slice = base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + self.inner.remote_repr.len];
+            mem.reverse(u8, mutable_slice);
+        }
     }
 };

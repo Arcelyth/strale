@@ -36,6 +36,11 @@ pub fn Strale(comptime format: ?Format) type {
             capacity: u32,
         };
 
+        pub const CharType = switch (Self.getFormat()) {
+            .utf8 => u21,
+            .byte => u8,
+        };
+
         pub inline fn isInline(self: *const Self) bool {
             return (self.inner.inline_repr.tag_and_len & 1) == 1;
         }
@@ -438,7 +443,16 @@ pub fn Strale(comptime format: ?Format) type {
 
         /// Remove the last character from the string and return it and
         /// does not trigger copy-on-write. Return `null` if the string is empty.
-        pub fn pop(self: *Self) ?u8 {
+        pub fn pop(self: *Self) ?CharType {
+            const f = Self.getFormat();
+            switch (f) {
+                .utf8 => return self.popUtf8(),
+                .byte => return self.popByte(),
+            }
+        }
+
+        /// Remove the last ascii character from the string and return it.
+        pub fn popByte(self: *Self) ?u8 {
             if (self.isInline()) {
                 const current_len = self.inner.inline_repr.tag_and_len >> 1;
                 if (current_len == 0) return null;
@@ -449,14 +463,51 @@ pub fn Strale(comptime format: ?Format) type {
             } else {
                 const current_len = self.inner.remote_repr.len;
                 if (current_len == 0) return null;
-
                 const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
                 const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
                 const char = base_data_ptr[self.inner.remote_repr.offset + current_len - 1];
-
                 self.inner.remote_repr.len -= 1;
+
+                const new_len = current_len - 1;
+
+                if (new_len <= 15) {
+                    self.remoteToInner(new_len);
+                }
                 return char;
             }
+        }
+
+        /// Remove the last utf8 character from the string and return it.
+        pub fn popUtf8(self: *Self) ?u21 {
+            const src = self.slice();
+            if (src.len == 0) return null;
+
+            var start = src.len - 1;
+
+            while (start > 0 and (src[start] & 0xC0) == 0x80) {
+                start -= 1;
+            }
+
+            const cp_len = src.len - start;
+
+            const codepoint = std.unicode.utf8Decode(src[start..]) catch {
+                const b = self.popByte() orelse return null;
+                return @as(u21, b);
+            };
+
+            if (self.isInline()) {
+                const cur = self.inner.inline_repr.tag_and_len >> 1;
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((cur - cp_len) << 1)) | 1;
+            } else {
+                self.inner.remote_repr.len -= @as(u32, @intCast(cp_len));
+
+                const new_len = self.inner.remote_repr.len;
+                if (new_len <= 15) {
+                    self.remoteToInner(new_len);
+                }
+            }
+
+            return codepoint;
         }
 
         /// Concatenate two strings and return a new `Strale` instance.
@@ -898,6 +949,22 @@ pub fn Strale(comptime format: ?Format) type {
         pub inline fn getFormat() Format {
             const f = format orelse .byte;
             return f;
+        }
+
+        // Make sure new_len <= 15.
+        fn remoteToInner(self: *Self, new_len: usize) void {
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+            const base = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+            var buf: [15]u8 = undefined;
+            @memcpy(buf[0..new_len], base[self.inner.remote_repr.offset..][0..new_len]);
+
+            self.deinit();
+            self.inner = .{
+                .inline_repr = .{
+                    .tag_and_len = @as(u8, @intCast(new_len << 1)) | 1,
+                    .data = buf,
+                },
+            };
         }
     };
 }

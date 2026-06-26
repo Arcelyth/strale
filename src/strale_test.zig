@@ -2,10 +2,10 @@ const std = @import("std");
 const testing = std.testing;
 
 const strale = @import("strale.zig");
-const Strale = strale.Strale;
+const StraleBytes = strale.StraleBytes;
 
 test "init empty" {
-    var s = Strale.initEmpty();
+    var s = StraleBytes.initEmpty();
     defer s.deinit();
 
     try testing.expect(s.isInline());
@@ -14,7 +14,7 @@ test "init empty" {
 }
 
 test "inline string" {
-    var s = try Strale.initSlice(testing.allocator, "hello");
+    var s = try StraleBytes.initSlice(testing.allocator, "hello");
     defer s.deinit();
 
     try testing.expect(s.isInline());
@@ -28,7 +28,7 @@ test "inline 15 bytes string" {
         std.debug.assert(str.len == 15);
     }
 
-    var s = try Strale.initSlice(testing.allocator, str);
+    var s = try StraleBytes.initSlice(testing.allocator, str);
     defer s.deinit();
 
     try testing.expect(s.isInline());
@@ -42,7 +42,7 @@ test "heap 16 bytes string" {
         std.debug.assert(str.len == 16);
     }
 
-    var s = try Strale.initSlice(testing.allocator, str);
+    var s = try StraleBytes.initSlice(testing.allocator, str);
     defer s.deinit();
 
     try testing.expect(!s.isInline());
@@ -52,7 +52,7 @@ test "heap 16 bytes string" {
 test "long string" {
     const str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-    var s = try Strale.initSlice(testing.allocator, str);
+    var s = try StraleBytes.initSlice(testing.allocator, str);
     defer s.deinit();
 
     try testing.expect(!s.isInline());
@@ -60,7 +60,7 @@ test "long string" {
 }
 
 test "clone inline string" {
-    var s1 = try Strale.initSlice(testing.allocator, "hello");
+    var s1 = try StraleBytes.initSlice(testing.allocator, "hello");
     defer s1.deinit();
 
     var s2 = s1.clone();
@@ -78,7 +78,7 @@ test "clone inline string" {
 test "clone heap string and ref count" {
     const str = "123456789abcdefg";
 
-    var s1 = try Strale.initSlice(testing.allocator, str);
+    var s1 = try StraleBytes.initSlice(testing.allocator, str);
     defer s1.deinit();
 
     var s2 = s1.clone();
@@ -95,7 +95,7 @@ test "clone heap string and ref count" {
 test "multiple clones" {
     const str = "this string is definitely larger than fifteen bytes";
 
-    var s1 = try Strale.initSlice(testing.allocator, str);
+    var s1 = try StraleBytes.initSlice(testing.allocator, str);
     defer s1.deinit();
 
     var s2 = s1.clone();
@@ -107,7 +107,7 @@ test "multiple clones" {
     var s4 = s1.clone();
     defer s4.deinit();
 
-    for ([4]Strale{ s1, s2, s3, s4 }) |s| {
+    for ([4]StraleBytes{ s1, s2, s3, s4 }) |s| {
         try testing.expectEqual(4, s.ref_count());
 
         try testing.expectEqualStrings(str, s.slice());
@@ -117,7 +117,7 @@ test "multiple clones" {
 test "clone then destroy clone" {
     const str = "123456789abcdefg";
 
-    var s1 = try Strale.initSlice(testing.allocator, str);
+    var s1 = try StraleBytes.initSlice(testing.allocator, str);
     defer s1.deinit();
 
     var s2 = s1.clone();
@@ -133,7 +133,7 @@ test "clone then destroy clone" {
 
 // Substr tests
 test "substr inline to inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello world",
     );
@@ -150,7 +150,7 @@ test "substr inline to inline" {
 }
 
 test "substr heap to inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -170,7 +170,7 @@ test "substr heap to heap" {
     const text =
         "abcdefghijklmnopqrstuvwxyz";
 
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         text,
     );
@@ -191,7 +191,7 @@ test "substr heap to heap" {
 
 // COW tests
 test "cow unique allocation" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -208,7 +208,7 @@ test "cow unique allocation" {
 }
 
 test "cow shared allocation" {
-    var s1 = try Strale.initSlice(
+    var s1 = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -232,7 +232,7 @@ test "cow shared allocation" {
 }
 
 test "cow after shared substr" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -251,7 +251,7 @@ test "cow after shared substr" {
 
 // Push tests
 test "push inline" {
-    var s = Strale.initEmpty();
+    var s = StraleBytes.initEmpty();
     defer s.deinit();
 
     try s.push(testing.allocator, 'a');
@@ -266,7 +266,7 @@ test "push inline" {
 }
 
 test "push converts inline to heap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "123456789abcdef",
     );
@@ -283,7 +283,7 @@ test "push converts inline to heap" {
 }
 
 test "push heap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "123456789abcdefg",
     );
@@ -298,7 +298,7 @@ test "push heap" {
 }
 
 test "push triggers cow" {
-    var s1 = try Strale.initSlice(
+    var s1 = try StraleBytes.initSlice(
         testing.allocator,
         "hello world hello world",
     );
@@ -321,7 +321,7 @@ test "push triggers cow" {
 }
 
 test "push after substring" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -345,7 +345,7 @@ test "push after substring" {
 
 // Pop tests
 test "pop inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abc",
     );
@@ -356,7 +356,7 @@ test "pop inline" {
 }
 
 test "pop heap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -367,7 +367,7 @@ test "pop heap" {
 }
 
 test "pop until empty" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abc",
     );
@@ -382,7 +382,7 @@ test "pop until empty" {
 }
 
 test "pop substring" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -401,7 +401,7 @@ test "pop substring" {
 }
 
 test "empty string" {
-    var s = Strale.initEmpty();
+    var s = StraleBytes.initEmpty();
     defer s.deinit();
 
     try testing.expect(s.isEmpty());
@@ -410,7 +410,7 @@ test "empty string" {
 }
 
 test "inline len" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello",
     );
@@ -420,7 +420,7 @@ test "inline len" {
 }
 
 test "heap len" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -430,7 +430,7 @@ test "heap len" {
 }
 
 test "inline cap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello",
     );
@@ -440,7 +440,7 @@ test "inline cap" {
 }
 
 test "heap cap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -450,7 +450,7 @@ test "heap cap" {
 }
 
 test "charAt inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello",
     );
@@ -462,7 +462,7 @@ test "charAt inline" {
 }
 
 test "charAt substring" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -478,10 +478,10 @@ test "charAt substring" {
 
 // Concat tests
 test "concat inline" {
-    var a = try Strale.initSlice(testing.allocator, "hello");
+    var a = try StraleBytes.initSlice(testing.allocator, "hello");
     defer a.deinit();
 
-    var b = try Strale.initSlice(testing.allocator, "world");
+    var b = try StraleBytes.initSlice(testing.allocator, "world");
     defer b.deinit();
 
     var c = try a.concat(testing.allocator, &b);
@@ -492,12 +492,12 @@ test "concat inline" {
 }
 
 test "concat heap" {
-    var a = try Strale.initSlice(testing.allocator, "hello");
+    var a = try StraleBytes.initSlice(testing.allocator, "hello");
     defer a.deinit();
 
     const long = " world world world world";
 
-    var b = try Strale.initSlice(testing.allocator, long);
+    var b = try StraleBytes.initSlice(testing.allocator, long);
     defer b.deinit();
 
     var c = try a.concat(testing.allocator, &b);
@@ -509,7 +509,7 @@ test "concat heap" {
 
 // Order tests
 test "order same heap slice fast path" {
-    var a = try Strale.initSlice(testing.allocator, "hello world");
+    var a = try StraleBytes.initSlice(testing.allocator, "hello world");
     defer a.deinit();
 
     var b = a.clone();
@@ -519,20 +519,20 @@ test "order same heap slice fast path" {
 }
 
 test "order inline equality" {
-    var a = try Strale.initSlice(testing.allocator, "abc");
+    var a = try StraleBytes.initSlice(testing.allocator, "abc");
     defer a.deinit();
 
-    var b = try Strale.initSlice(testing.allocator, "abc");
+    var b = try StraleBytes.initSlice(testing.allocator, "abc");
     defer b.deinit();
 
     try testing.expectEqual(.eq, a.order(&b));
 }
 
 test "order ordering" {
-    var a = try Strale.initSlice(testing.allocator, "abc");
+    var a = try StraleBytes.initSlice(testing.allocator, "abc");
     defer a.deinit();
 
-    var b = try Strale.initSlice(testing.allocator, "abd");
+    var b = try StraleBytes.initSlice(testing.allocator, "abd");
     defer b.deinit();
 
     try testing.expectEqual(.lt, a.order(&b));
@@ -540,21 +540,21 @@ test "order ordering" {
 
 // Find/rind tests
 test "find substring" {
-    var s = try Strale.initSlice(testing.allocator, "hello world");
+    var s = try StraleBytes.initSlice(testing.allocator, "hello world");
     defer s.deinit();
 
     try testing.expectEqual(6, s.find("world"));
 }
 
 test "find missing" {
-    var s = try Strale.initSlice(testing.allocator, "hello");
+    var s = try StraleBytes.initSlice(testing.allocator, "hello");
     defer s.deinit();
 
     try testing.expectEqual(null, s.find("zzz"));
 }
 
 test "rfind multiple occurrences" {
-    var s = try Strale.initSlice(testing.allocator, "ababa");
+    var s = try StraleBytes.initSlice(testing.allocator, "ababa");
     defer s.deinit();
 
     try testing.expectEqual(4, s.rfind("a"));
@@ -562,7 +562,7 @@ test "rfind multiple occurrences" {
 
 // Trims' tests
 test "trimStart" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "   hello",
     );
@@ -575,7 +575,7 @@ test "trimStart" {
 }
 
 test "trimEnd" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello   ",
     );
@@ -588,7 +588,7 @@ test "trimEnd" {
 }
 
 test "trim" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "   hello   ",
     );
@@ -601,7 +601,7 @@ test "trim" {
 }
 
 test "trim custom pattern" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "***hello***",
     );
@@ -614,7 +614,7 @@ test "trim custom pattern" {
 }
 
 test "count" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abababa",
     );
@@ -624,7 +624,7 @@ test "count" {
 }
 
 test "reverse inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello",
     );
@@ -636,7 +636,7 @@ test "reverse inline" {
 }
 
 test "reverse heap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -651,7 +651,7 @@ test "reverse heap" {
 }
 
 test "splitToStrale iterator" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "one,two,three,four",
     );
@@ -733,7 +733,7 @@ test "splitToStrale iterator" {
 }
 
 test "linesToStrale iterator" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "line1\nline2\nline3",
     );
@@ -767,7 +767,7 @@ test "linesToStrale iterator" {
 }
 
 test "repeat inline" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "ab",
     );
@@ -784,7 +784,7 @@ test "repeat inline" {
 }
 
 test "repeat heap" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "abcdef",
     );
@@ -801,7 +801,7 @@ test "repeat heap" {
 }
 
 test "toLowercase" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "HELLO World 123",
     );
@@ -819,7 +819,7 @@ test "toLowercase" {
 }
 
 test "toUppercase" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hello World 123",
     );
@@ -837,7 +837,7 @@ test "toUppercase" {
 }
 
 test "toCapitalized" {
-    var s = try Strale.initSlice(
+    var s = try StraleBytes.initSlice(
         testing.allocator,
         "hELLo WoRLD",
     );

@@ -649,3 +649,85 @@ test "reverse heap" {
         s.slice(),
     );
 }
+
+test "split iterator" {
+    var s = try Strale.initSlice(
+        testing.allocator,
+        "one,two,three,four",
+    );
+    defer s.deinit();
+
+    var iter = s.splitToStrale(",");
+    defer iter.deinit();
+
+    // first
+    var part1 = iter.first();
+    defer part1.deinit();
+    try testing.expectEqualStrings(
+        "one",
+        part1.slice(),
+    );
+
+    // peek
+    var part2 = iter.peek().?;
+    defer part2.deinit();
+    try testing.expectEqualStrings(
+        "two",
+        part2.slice(),
+    );
+
+    // next
+    var part3 = iter.next().?;
+    defer part3.deinit();
+    try testing.expectEqualStrings(
+        "two",
+        part3.slice(),
+    );
+
+    var part4 = iter.next().?;
+    defer part4.deinit();
+    try testing.expectEqualStrings(
+        "three",
+        part4.slice(),
+    );
+
+    // rest
+    var remain = iter.rest();
+    defer remain.deinit();
+    try testing.expectEqualStrings(
+        "four",
+        remain.slice(),
+    );
+
+    // reset
+    iter.reset();
+    var part5 = iter.next().?;
+    defer part5.deinit();
+    try testing.expectEqualStrings(
+        "one",
+        part5.slice(),
+    );
+
+    var part6 = iter.next().?;
+    defer part6.deinit();
+    try testing.expectEqualStrings(
+        "two",
+        part6.slice(),
+    );
+
+    var part7 = iter.next().?;
+    defer part7.deinit();
+    try testing.expectEqualStrings(
+        "three",
+        part7.slice(),
+    );
+
+    var part8 = iter.next().?;
+    defer part8.deinit();
+    try testing.expectEqualStrings(
+        "four",
+        part8.slice(),
+    );
+
+    try testing.expect(iter.next() == null);
+}

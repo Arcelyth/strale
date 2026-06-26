@@ -514,4 +514,74 @@ pub const Strale = struct {
             mem.reverse(u8, mutable_slice);
         }
     }
+
+    /// Iterator returned by `splitToStrale()`.
+    ///
+    /// Each yielded element is a `Strale` that shares the original storage
+    /// whenever possible. Small substrings (15 bytes or fewer) are stored
+    /// inline automatically.
+    ///
+    /// The iterator owns one cloned reference to the original string.
+    /// Call `deinit()` after iteration to release that reference.
+    pub const SplitIterator = struct {
+        owner: Self,
+        iter: mem.SplitIterator(u8, .sequence),
+
+        /// Return the first substring.
+        ///
+        /// This resets the iterator to the beginning and returns the first element.
+        pub fn first(self: *SplitIterator) Self {
+            const sub = self.iter.first();
+            return self.owner.fromSubSlice(sub);
+        }
+
+        /// Advance the iterator and return the next substring.
+        ///
+        /// Return `null` when all substrings have been consumed.
+        pub fn next(self: *SplitIterator) ?Self {
+            const sub = self.iter.next() orelse return null;
+            return self.owner.fromSubSlice(sub);
+        }
+
+        /// Return the next substring without advancing the iterator.
+        ///
+        /// Return `null` if no more substrings remain.
+        pub fn peek(self: *SplitIterator) ?Self {
+            const sub = self.iter.peek() orelse return null;
+            return self.owner.fromSubSlice(sub);
+        }
+
+        /// Reset the iterator back to the beginning.
+        pub fn reset(self: *SplitIterator) void {
+            self.iter.reset();
+        }
+
+        /// Return the remaining portion of the string without further splitting.
+        ///
+        /// The returned string shares the original storage whenever possible.
+        pub fn rest(self: SplitIterator) Self {
+            const sub = self.iter.rest();
+            return self.owner.fromSubSlice(sub);
+        }
+
+        /// Release the iterator's internal reference to the original string.
+        ///
+        /// This must be called after the iterator is no longer needed.
+        pub fn deinit(self: *SplitIterator) void {
+            self.owner.deinit();
+        }
+    };
+
+    /// Return a standard Zig split iterator yielding byte slices.
+    pub fn split(self: *const Self, delimiter: []const u8) mem.SplitIterator(u8, .sequence) {
+        return mem.splitSequence(self.slice(), delimiter);
+    }
+
+    /// Return an iterator yielding `Strale` substrings.
+    pub fn splitToStrale(self: *Self, delimiter: []const u8) SplitIterator {
+        return SplitIterator{
+            .owner = self.clone(),
+            .iter = mem.splitSequence(u8, self.slice(), delimiter),
+        };
+    }
 };

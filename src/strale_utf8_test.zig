@@ -47,3 +47,167 @@ test "utf8 remote to inline" {
     try testing.expect(s.isInline());
     try testing.expectEqual(5, s.len());
 }
+
+test "split utf8 iterator" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "猫和狗和パン和머리",
+    );
+    defer s.deinit();
+
+    var iter = s.splitToStrale("和");
+    defer iter.deinit();
+
+    // first
+    var part1 = iter.first();
+    defer part1.deinit();
+    try testing.expectEqualStrings(
+        "猫",
+        part1.slice(),
+    );
+
+    // peek
+    var part2 = iter.peek().?;
+    defer part2.deinit();
+    try testing.expectEqualStrings(
+        "狗",
+        part2.slice(),
+    );
+
+    // next
+    var part3 = iter.next().?;
+    defer part3.deinit();
+    try testing.expectEqualStrings(
+        "狗",
+        part3.slice(),
+    );
+
+    var part4 = iter.next().?;
+    defer part4.deinit();
+    try testing.expectEqualStrings(
+        "パン",
+        part4.slice(),
+    );
+
+    // rest
+    var remain = iter.rest();
+    defer remain.deinit();
+    try testing.expectEqualStrings(
+        "머리",
+        remain.slice(),
+    );
+
+    // reset
+    iter.reset();
+    var part5 = iter.next().?;
+    defer part5.deinit();
+    try testing.expectEqualStrings(
+        "猫",
+        part5.slice(),
+    );
+
+    var part6 = iter.next().?;
+    defer part6.deinit();
+    try testing.expectEqualStrings(
+        "狗",
+        part6.slice(),
+    );
+
+    var part7 = iter.next().?;
+    defer part7.deinit();
+    try testing.expectEqualStrings(
+        "パン",
+        part7.slice(),
+    );
+
+    var part8 = iter.next().?;
+    defer part8.deinit();
+    try testing.expectEqualStrings(
+        "머리",
+        part8.slice(),
+    );
+
+    try testing.expect(iter.next() == null);
+}
+
+test "repeat utf8" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "?哈?",
+    );
+    defer s.deinit();
+
+    var r = try s.repeat(testing.allocator, 7);
+    defer r.deinit();
+
+    try testing.expectEqualStrings(
+        "?哈??哈??哈??哈??哈??哈??哈?",
+        r.slice(),
+    );
+}
+
+test "toLowercase utf8" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "アカリン! ABCde",
+    );
+    defer s.deinit();
+
+    var lower = try s.toLowercase(
+        testing.allocator,
+    );
+    defer lower.deinit();
+
+    try testing.expectEqualStrings(
+        "アカリン! abcde",
+        lower.slice(),
+    );
+}
+
+test "toUppercase" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "hello 世界",
+    );
+    defer s.deinit();
+
+    var upper = try s.toUppercase(
+        testing.allocator,
+    );
+    defer upper.deinit();
+
+    try testing.expectEqualStrings(
+        "HELLO 世界",
+        upper.slice(),
+    );
+}
+
+test "toCapitalized" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "hELLo 世界",
+    );
+    defer s.deinit();
+
+    var cap = try s.toCapitalized(
+        testing.allocator,
+    );
+    defer cap.deinit();
+
+    try testing.expectEqualStrings(
+        "Hello 世界",
+        cap.slice(),
+    );
+}
+
+test "reverse utf8" {
+    var s = try StraleUtf8.initSlice(testing.allocator, "a界b🙂");
+    defer s.deinit();
+
+    try s.reverse();
+
+    try testing.expectEqualStrings(
+        "🙂b界a",
+        s.slice(),
+    );
+}

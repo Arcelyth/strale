@@ -655,18 +655,56 @@ pub fn Strale(comptime format: ?Format) type {
         /// If it is a shared remote string, it safely triggers COW (Copy-On-Write)
         /// using its internal allocator before reversing.
         pub fn reverse(self: *Self) !void {
-            if (self.isInline()) {
-                const inline_len = self.inner.inline_repr.tag_and_len >> 1;
-                if (inline_len <= 1) return;
-                mem.reverse(u8, self.inner.inline_repr.data[0..inline_len]);
-            } else {
-                try self.cow();
+            const f = Self.getFormat();
+            switch (f) {
+                .utf8 => {
+                    if (self.isInline()) {
+                        const inline_len = self.inner.inline_repr.tag_and_len >> 1;
+                        if (inline_len <= 1) return;
+                        reverseUtf8Slice(self.inner.inline_repr.data[0..inline_len]);
+                    } else {
+                        try self.cow();
+                        const current_len = self.inner.remote_repr.len;
+                        if (current_len <= 1) return;
 
-                if (self.inner.remote_repr.len <= 1) return;
-                const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-                const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
-                const mutable_slice = base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + self.inner.remote_repr.len];
-                mem.reverse(u8, mutable_slice);
+                        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+                        const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                        const mutable_slice = base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + current_len];
+                        reverseUtf8Slice(mutable_slice);
+                    }
+                },
+
+                else => {
+                    if (self.isInline()) {
+                        const inline_len = self.inner.inline_repr.tag_and_len >> 1;
+                        if (inline_len <= 1) return;
+                        mem.reverse(u8, self.inner.inline_repr.data[0..inline_len]);
+                    } else {
+                        try self.cow();
+                        if (self.inner.remote_repr.len <= 1) return;
+
+                        const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+                        const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                        const mutable_slice = base_data_ptr[self.inner.remote_repr.offset .. self.inner.remote_repr.offset + self.inner.remote_repr.len];
+                        mem.reverse(u8, mutable_slice);
+                    }
+                },
+            }
+        }
+
+        fn reverseUtf8Slice(s: []u8) void {
+            mem.reverse(u8, s);
+            var i: usize = 0;
+            while (i < s.len) {
+                const start = i;
+                while (i < s.len and (s[i] & 0xC0) == 0x80) : (i += 1) {}
+
+                if (i < s.len) {
+                    mem.reverse(u8, s[start .. i + 1]);
+                    i += 1;
+                } else {
+                    mem.reverse(u8, s[start..i]);
+                }
             }
         }
 

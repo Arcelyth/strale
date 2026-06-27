@@ -1,14 +1,15 @@
 # Strale
 
-A memory efficient compact, copy-on-write (COW) string type for Zig.
+A memory efficient compact, copy-on-write (COW) string type for Zig. <br>
+The type occupies **16 bytes** on 64-bit platforms.
 
 Strale combines:
 - Small String Optimization (SSO)
 - Reference counting
 - Zero-copy substring views
 - Copy-on-write mutation
-
-The type occupies **16 bytes** on 64-bit platforms.
+- Optional UTF-8 support
+- Optional thread-safety support 
 
 ## Installation
 
@@ -36,43 +37,41 @@ Add to your `build.zig`:
 ```zig
 const std = @import("std");
 const strale = @import("strale");
-const Strale = strale.Strale;
+const StraleBytes = strale.StraleBytes;
+const StraleUtf8Atomic = strale.StraleUtf8Atomic;
 
 pub fn main() !void {
     const alloc = std.heap.page_allocator;
 
-    // create string
-    var a = try Strale.initSlice(alloc, "hello");
+    var a = try StraleBytes.initSlice(alloc, "hello");
     defer a.deinit();
 
-    var b = try Strale.initSlice(alloc, " world");
-    defer b.deinit();
+    var b = a.clone();
+    try b.push(alloc, '!');
+    std.debug.print("a = {s}\n", .{a.slice()});
+    std.debug.print("b = {s}\n", .{b.slice()});
 
-    // concat
-    var c = try a.concat(alloc, &b);
-    defer c.deinit();
-    std.debug.print("concat: {s}\n", .{c.slice()});
+    var long = try StraleBytes.initSlice(
+        alloc,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer long.deinit();
 
-    // substring
-    var sub = c.substr(6, 5);
+    var sub = long.substr(10, 10);
     defer sub.deinit();
-    std.debug.print("substr: {s}\n", .{sub.slice()});
 
-    // push
-    try sub.push(alloc, '!');
-    std.debug.print("after push: {s}\n", .{sub.slice()});
+    std.debug.print("sub = {s}\n", .{sub.slice()});
 
-    // pop
-    const ch = sub.pop();
-    std.debug.print("pop: {?c}\n", .{ch});
-    std.debug.print("after pop: {s}\n", .{sub.slice()});
+    var utf8 = try StraleUtf8Atomic.initSlice(alloc, "你好,世界");
+    defer utf8.deinit();
 
-    // find
-    const idx = c.find("world");
-    std.debug.print("find 'world': {?}\n", .{idx});
+    defer utf8.deinit();
 
-    // charAt
-    std.debug.print("charAt(1): {?c}\n", .{c.charAt(1)});
+    var iter = utf8.split(",");
+
+    while (iter.next()) |c| {
+        std.debug.print("{s}\n", .{c});
+    }
 }
 ```
 

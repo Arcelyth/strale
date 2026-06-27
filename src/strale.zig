@@ -63,7 +63,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
 
         const init_ref = switch (Self.getAtomicity()) {
             .not_atomic => 1,
-            .atomic => std.atomic.Value(1),
+            .atomic => std.atomic.Value(u32).init(1),
         };
 
         pub inline fn isInline(self: *const Self) bool {
@@ -146,7 +146,11 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             if (self.isInline()) return null;
 
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            return header.ref_count;
+
+            return switch (Self.getAtomicity()) {
+                .not_atomic => header.ref_count,
+                .atomic => header.ref_count.load(.monotonic),
+            };
         }
 
         // Return string's length.
@@ -1018,7 +1022,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
         inline fn refInc(ref: *RefType) void {
             switch (getAtomicity()) {
                 .atomic => {
-                    ref.fetchAdd(1, .monotonic);
+                    _ = ref.fetchAdd(1, .monotonic);
                 },
                 .not_atomic => {
                     ref.* += 1;
@@ -1071,5 +1075,5 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
 pub const StraleBytes = Strale(.byte, .not_atomic);
 pub const StraleUtf8 = Strale(.utf8, .not_atomic);
 
-pub const StraleAtomic = StraleBytes(.byte, .atomic);
-pub const StraleUtf8Atomic = StraleBytes(.utf8, .atomic);
+pub const StraleAtomic = Strale(.byte, .atomic);
+pub const StraleUtf8Atomic = Strale(.utf8, .atomic);

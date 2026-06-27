@@ -2,20 +2,35 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = std.mem.Allocator;
 
-pub const Format = enum(u2) {
+pub const Format = enum {
     utf8,
     byte,
 };
 
-/// A compact string type with Small String Optimization (SSO).
-/// Strings up to 15 bytes are stored directly inside the object without
-/// heap allocation. Larger strings are stored in a reference-counted
-/// shared buffer.
+pub const Atomicity = enum {
+    atomic,
+    not_atomic,
+};
+
+/// A compact copy-on-write string type with Small String Optimization (SSO).
 ///
-/// This type is not thread-safe as the ref_count field is not change
-/// atomic. You can use this type if you are using single thread or just
-/// small string.
-pub fn Strale(comptime format: ?Format) type {
+/// `Strale` stores strings of up to 15 bytes directly inside the object
+/// without heap allocation. Longer strings are stored in a heap-allocated,
+/// reference-counted buffer and support efficient substring sharing.
+///
+/// The behavior of the string is controlled by two compile-time parameters:
+///
+/// - `format`
+///   - `.byte`: treat the string as an arbitrary byte sequence.
+///   - `.utf8`: treat the string as UTF-8 encoded text and enable
+///     Unicode-aware operations.
+///
+/// - `atomicity`
+///   - `.not_atomic`: use non-atomic reference counting for slightly enhanced
+///     performance in single-threaded environments.
+///   - `.atomic`: use atomic reference counting, allowing instances
+///     to be safely shared between threads.
+pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
     return struct {
         const Self = @This();
         const init_capacity = 32;
@@ -30,15 +45,25 @@ pub fn Strale(comptime format: ?Format) type {
             len: u32,
         } },
 
-        const Header = struct {
-            alloc: Allocator,
-            ref_count: u32,
-            capacity: u32,
-        };
-
         pub const CharType = switch (Self.getFormat()) {
             .utf8 => u21,
             .byte => u8,
+        };
+
+        pub const RefType = switch (Self.getAtomicity()) {
+            .not_atomic => u32,
+            .atomic => std.atomic.Value(u32),
+        };
+
+        const Header = struct {
+            alloc: Allocator,
+            ref_count: RefType,
+            capacity: u32,
+        };
+
+        const init_ref = switch (Self.getAtomicity()) {
+            .not_atomic => 1,
+            .atomic => std.atomic.Value(1),
         };
 
         pub inline fn isInline(self: *const Self) bool {
@@ -79,7 +104,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                 header.* = .{
                     .alloc = alloc,
-                    .ref_count = 1,
+                    .ref_count = init_ref,
                     .capacity = @intCast(src.len),
                 };
 
@@ -108,8 +133,7 @@ pub fn Strale(comptime format: ?Format) type {
             if (self.isInline()) return;
 
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            header.ref_count -= 1;
-            if (header.ref_count == 0) {
+            if (Self.refDec(&header.ref_count)) {
                 const total_size = @sizeOf(Header) + header.capacity;
                 const alloc = header.alloc;
                 const bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..total_size];
@@ -142,7 +166,7 @@ pub fn Strale(comptime format: ?Format) type {
             return header.capacity;
         }
 
-        // Return the character at specific position.
+        // Return the byte at specific position.
         // Return null if string is empty.
         pub fn charAt(self: *const Self, pos: usize) ?u8 {
             if (self.isInline()) {
@@ -179,7 +203,7 @@ pub fn Strale(comptime format: ?Format) type {
             if (self.isInline()) return self.*;
 
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            header.ref_count += 1;
+            Self.refInc(&header.ref_count);
             return self.*;
         }
 
@@ -222,7 +246,7 @@ pub fn Strale(comptime format: ?Format) type {
             }
 
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            header.ref_count += 1;
+            Self.refInc(&header.ref_count);
             return Self{
                 .inner = .{
                     .remote_repr = .{
@@ -248,13 +272,13 @@ pub fn Strale(comptime format: ?Format) type {
             if (self.isInline()) return;
 
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            if (header.ref_count == 1) return;
+            if (Self.refEq(header.ref_count, 1)) return;
 
             const current_data = self.slice();
             const alloc = header.alloc;
             const new_data = try Self.initSlice(alloc, current_data);
 
-            header.ref_count -= 1;
+            _ = Self.refDec(&header.ref_count);
             self.* = new_data;
         }
 
@@ -269,8 +293,7 @@ pub fn Strale(comptime format: ?Format) type {
                 .utf8 => {
                     try self.pushUtf8(alloc, @as(u21, @intCast(char)));
                 },
-
-                else => {
+                .byte => {
                     try self.pushByte(alloc, @as(u8, @intCast(char)));
                 },
             }
@@ -293,7 +316,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                     header.* = .{
                         .alloc = alloc,
-                        .ref_count = 1,
+                        .ref_count = init_ref,
                         .capacity = new_capacity,
                     };
 
@@ -317,7 +340,7 @@ pub fn Strale(comptime format: ?Format) type {
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
 
             // not shared
-            if (header.ref_count == 1 and (current_offset + current_len) < header.capacity) {
+            if (Self.refEq(header.ref_count, 1) and (current_offset + current_len) < header.capacity) {
                 const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
                 base_data_ptr[current_offset + current_len] = char;
                 self.inner.remote_repr.len += 1;
@@ -334,7 +357,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                 new_header.* = .{
                     .alloc = old_alloc,
-                    .ref_count = 1,
+                    .ref_count = init_ref,
                     .capacity = new_capacity,
                 };
 
@@ -342,8 +365,7 @@ pub fn Strale(comptime format: ?Format) type {
                 @memcpy(data_ptr[0..current_len], current_slice);
                 data_ptr[current_len] = char;
 
-                header.ref_count -= 1;
-                if (header.ref_count == 0) {
+                if (Self.refDec(&header.ref_count)) {
                     const old_total_size = @sizeOf(Header) + header.capacity;
                     const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
                     old_alloc.free(old_bytes);
@@ -379,7 +401,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                     header.* = .{
                         .alloc = alloc,
-                        .ref_count = 1,
+                        .ref_count = init_ref,
                         .capacity = new_capacity,
                     };
 
@@ -402,7 +424,7 @@ pub fn Strale(comptime format: ?Format) type {
             const current_offset = self.inner.remote_repr.offset;
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
 
-            if (header.ref_count == 1 and (current_offset + current_len + n_u32) <= header.capacity) {
+            if (Self.refEq(header.ref_count, 1) and (current_offset + current_len + n_u32) <= header.capacity) {
                 const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
                 @memcpy(base_data_ptr[current_offset + current_len ..][0..n], utf8_bytes);
                 self.inner.remote_repr.len += n_u32;
@@ -418,7 +440,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                 new_header.* = .{
                     .alloc = old_alloc,
-                    .ref_count = 1,
+                    .ref_count = init_ref,
                     .capacity = new_capacity,
                 };
 
@@ -426,8 +448,7 @@ pub fn Strale(comptime format: ?Format) type {
                 @memcpy(data_ptr[0..current_len], current_slice);
                 @memcpy(data_ptr[current_len .. current_len + n], utf8_bytes);
 
-                header.ref_count -= 1;
-                if (header.ref_count == 0) {
+                if (Self.refDec(&header.ref_count)) {
                     const old_total_size = @sizeOf(Header) + header.capacity;
                     const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
                     old_alloc.free(old_bytes);
@@ -535,7 +556,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                 header.* = .{
                     .alloc = alloc,
-                    .ref_count = 1,
+                    .ref_count = init_ref,
                     .capacity = @intCast(total_len),
                 };
 
@@ -607,7 +628,7 @@ pub fn Strale(comptime format: ?Format) type {
 
             const offset_diff = @intFromPtr(sub.ptr) - @intFromPtr(original.ptr);
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
-            header.ref_count += 1;
+            Self.refInc(&header.ref_count);
 
             return Self{
                 .inner = .{
@@ -824,7 +845,7 @@ pub fn Strale(comptime format: ?Format) type {
 
                 header.* = .{
                     .alloc = alloc,
-                    .ref_count = 1,
+                    .ref_count = init_ref,
                     .capacity = @intCast(total_len),
                 };
 
@@ -871,7 +892,7 @@ pub fn Strale(comptime format: ?Format) type {
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .alloc = alloc,
-                .ref_count = 1,
+                .ref_count = init_ref,
                 .capacity = @intCast(length),
             };
 
@@ -916,7 +937,7 @@ pub fn Strale(comptime format: ?Format) type {
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .alloc = alloc,
-                .ref_count = 1,
+                .ref_count = init_ref,
                 .capacity = @intCast(length),
             };
 
@@ -963,7 +984,7 @@ pub fn Strale(comptime format: ?Format) type {
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .alloc = alloc,
-                .ref_count = 1,
+                .ref_count = init_ref,
                 .capacity = @intCast(length),
             };
 
@@ -989,6 +1010,46 @@ pub fn Strale(comptime format: ?Format) type {
             return f;
         }
 
+        pub inline fn getAtomicity() Atomicity {
+            const a = atomicity orelse .not_atomic;
+            return a;
+        }
+
+        inline fn refInc(ref: *RefType) void {
+            switch (getAtomicity()) {
+                .atomic => {
+                    ref.fetchAdd(1, .monotonic);
+                },
+                .not_atomic => {
+                    ref.* += 1;
+                },
+            }
+        }
+
+        inline fn refDec(ref: *RefType) bool {
+            switch (getAtomicity()) {
+                .atomic => {
+                    if (ref.fetchSub(1, .release) == 1) return true;
+                    return false;
+                },
+                .not_atomic => {
+                    ref.* -= 1;
+                    return ref.* == 0;
+                },
+            }
+        }
+
+        inline fn refEq(ref: RefType, value: usize) bool {
+            switch (getAtomicity()) {
+                .atomic => {
+                    return ref.load(.acquire) == value;
+                },
+                .not_atomic => {
+                    return ref == value;
+                },
+            }
+        }
+
         // Make sure new_len <= 15.
         fn remoteToInner(self: *Self, new_len: usize) void {
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
@@ -1007,5 +1068,8 @@ pub fn Strale(comptime format: ?Format) type {
     };
 }
 
-pub const StraleBytes = Strale(.byte);
-pub const StraleUtf8 = Strale(.utf8);
+pub const StraleBytes = Strale(.byte, .not_atomic);
+pub const StraleUtf8 = Strale(.utf8, .not_atomic);
+
+pub const StraleAtomic = StraleBytes(.byte, .atomic);
+pub const StraleUtf8Atomic = StraleBytes(.utf8, .atomic);

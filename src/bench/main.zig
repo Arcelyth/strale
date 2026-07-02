@@ -6,19 +6,24 @@ pub fn main(init: std.process.Init) !void {
     const iterations = 10_000;
     const io = init.io;
 
-    var clone = try CloneBench(.utf8, .not_atomic).init(alloc);
-    var clone_atomic = try CloneBench(.utf8, .atomic).init(alloc);
+    const short = "abcde";
+    const long = "abcdefghijklmnopqrstuvwxyz";
+    var clone_inline = try CloneBench(.utf8, .not_atomic).init(alloc, short);
+    defer clone_inline.deinit();
+    var clone = try CloneBench(.utf8, .not_atomic).init(alloc, long);
     defer clone.deinit();
-
-    var bench = clone.bench();
-
-    var ns = try bench.run(iterations, io);
-    printResult("CloneBench", iterations, ns);
-
+    var clone_atomic = try CloneBench(.utf8, .atomic).init(alloc, long);
     defer clone_atomic.deinit();
 
-    bench = clone_atomic.bench();
+    var bench = clone_inline.bench();
+    var ns = try bench.run(iterations, io);
+    printResult("CloneBenchInline", iterations, ns);
 
+    bench = clone.bench();
+    ns = try bench.run(iterations, io);
+    printResult("CloneBench", iterations, ns);
+
+    bench = clone_atomic.bench();
     ns = try bench.run(iterations, io);
     printResult("CloneBenchAtomic", iterations, ns);
 

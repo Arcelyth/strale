@@ -7,10 +7,10 @@ pub fn CloneBench(comptime format: strale.Format, comptime atomicity: strale.Ato
         const Self = @This();
         s: strale.Strale(format, atomicity),
 
-        pub fn init(alloc: std.mem.Allocator) !Self {
-            const str = strale.Strale(format, atomicity);
+        pub fn init(alloc: std.mem.Allocator, content: []const u8) !Self {
+            const Str = strale.Strale(format, atomicity);
             return .{
-                .s = try str.initSlice(alloc, "abcdefghijklmnopqrstuvwxyz"),
+                .s = try Str.initSlice(alloc, content),
             };
         }
 
@@ -19,14 +19,14 @@ pub fn CloneBench(comptime format: strale.Format, comptime atomicity: strale.Ato
         }
 
         pub fn step(ptr: *anyopaque) !void {
-            const self: *@This() = @ptrCast(@alignCast(ptr));
+            const self: *Self = @ptrCast(@alignCast(ptr));
 
-            std.mem.doNotOptimizeAway(self.s);
+            std.mem.doNotOptimizeAway(&self.s);
             const c = self.s.clone();
             std.mem.doNotOptimizeAway(c);
         }
 
-        pub fn bench(self: *@This()) Benchmark {
+        pub fn bench(self: *Self) Benchmark {
             return .{
                 .ptr = self,
                 .stepFn = step,

@@ -10,32 +10,41 @@ test "pop" {
     const alloc = std.heap.page_allocator;
     var s = try Str.initSlice(alloc, "hello");
     defer s.deinit();
+    const s2 = try Str.initSlice(alloc, "world");
+
     var buf = try Buffer.init(alloc);
     defer buf.deinit();
     try buf.pushBack(s.clone());
+    // s2 only use once so move to buf
+    try buf.pushBack(s2);
     try testing.expect(!buf.isEmpty());
 
     var result = buf.popFront().?;
     defer result.deinit();
 
+    var result2 = buf.popFront().?;
+    defer result2.deinit();
+
     try testing.expectEqualStrings("hello", result.slice());
+    try testing.expectEqualStrings("world", result2.slice());
     try testing.expect(buf.isEmpty());
 }
 
 test "buffer peek next char" {
     const alloc = std.heap.page_allocator;
-    var s = try Str.initSlice(alloc, "hello");
-    defer s.deinit();
-    var s2 = try Str.initSlice(alloc, "world");
-    defer s.deinit();
     var buf = try Buffer.init(alloc);
     defer buf.deinit();
-    try buf.pushBack(s.clone());
-    try buf.pushBack(s2.clone());
+    const s2 = try Str.initSlice(alloc, "hello");
+    try buf.pushBack(s2);
+
+    try buf.pushBackSlice("world");
     try testing.expect(!buf.isEmpty());
 
     try testing.expectEqual('h', buf.peekChar());
     try testing.expectEqual('h', buf.nextChar());
     var f = buf.popFront().?;
+    defer f.deinit();
+    try testing.expectEqualStrings("hello", s2.slice());
     try testing.expectEqualStrings("ello", f.slice());
 }
+

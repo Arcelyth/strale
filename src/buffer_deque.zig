@@ -15,12 +15,16 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
 
         pub fn init(alloc: std.mem.Allocator) !Self {
             return Self{
-                .buffer = try std.Deque(strale.Strale(format, atomicity)).initCapacity(alloc, 16),
+                .buffer = try std.Deque(T).initCapacity(alloc, 16),
                 .allocator = alloc,
             };
         }
 
         pub fn deinit(self: *Self) void {
+            while (self.buffer.popFront()) |item| {
+                var tmp = item;
+                tmp.deinit();
+            }
             self.buffer.deinit(self.allocator);
         }
 
@@ -28,24 +32,62 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             return self.buffer.len == 0;
         }
 
+        /// Remove and return the `Strale` item from the front of the queue.
+        ///
+        /// Yield ownership of the returned item back to the caller. The caller
+        /// becomes responsible for invoking `.deinit()` on the returned strin
         pub fn popFront(self: *Self) ?T {
             return self.buffer.popFront();
         }
 
+        /// Remove and return the `Strale` item from the back of the queue.
+        ///
+        /// Yield ownership of the returned item back to the caller. The caller
+        /// becomes responsible for invoking `.deinit()` on the returned strin
         pub fn popBack(self: *Self) ?T {
             return self.buffer.popBack();
         }
 
+        /// Insert a `Strale` string at the front of the queue.
+        ///
+        /// If the item's length is 0, it will be instantly destroyed to save space.
+        /// If the caller wishes to retain ownership, pass `item.clone()` instead.
         pub fn pushFront(self: *Self, item: T) error{OutOfMemory}!void {
-            if (item.len() == 0) return;
+            if (item.len() == 0) {
+                var tmp = item;
+                tmp.deinit();
+                return;
+            }
             try self.buffer.pushFront(self.allocator, item);
         }
 
+        /// Insert a `Strale` string at the bask of the queue.
+        ///
+        /// If the item's length is 0, it will be instantly destroyed to save space.
+        /// If the caller wishes to retain ownership, pass `item.clone()` instead.
         pub fn pushBack(self: *Self, item: T) error{OutOfMemory}!void {
-            if (item.len() == 0) return;
+            if (item.len() == 0) {
+                var tmp = item;
+                tmp.deinit();
+                return;
+            }
+
             try self.buffer.pushBack(self.allocator, item);
         }
 
+        pub fn pushFrontSlice(self: *Self, slice: []const u8) !void {
+            if (slice.len == 0) return;
+            const s = T.initSlice(self.allocator, slice);
+            try self.buffer.pushFront(self.allocator, s);
+        }
+
+        pub fn pushBackSlice(self: *Self, slice: []const u8) !void {
+            if (slice.len == 0) return;
+            const s = try T.initSlice(self.allocator, slice);
+            try self.buffer.pushBack(self.allocator, s);
+        }
+
+        /// Return the next character at the front of the queue without consuming it.
         pub fn peekChar(self: *Self) ?CharType {
             if (self.buffer.front()) |f| {
                 return f.peek();
@@ -53,15 +95,25 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             return null;
         }
 
+        /// Consume and return the next character from the front of the queue.
+        /// 
+        /// Return `null` when the entire queue runs out of characters.
         pub fn nextChar(self: *Self) ?CharType {
-            if (self.buffer.frontPtr()) |f| {
-                const c = f.popFront() orelse return null;
-
-                if (f.isEmpty()) {
-                    _ = self.buffer.popFront();
+            while (self.buffer.frontPtr()) |f| {
+                if (f.popFront()) |c| {
+                    if (f.isEmpty()) {
+                        if (self.buffer.popFront()) |item| {
+                            var tmp = item;
+                            tmp.deinit();
+                        }
+                    }
+                    return c;
+                } else {
+                    if (self.buffer.popFront()) |item| {
+                        var tmp = item;
+                        tmp.deinit();
+                    }
                 }
-
-                return c;
             }
 
             return null;

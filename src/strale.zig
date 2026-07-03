@@ -535,6 +535,117 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             return codepoint;
         }
 
+        /// Remove the first character from the string and return it and
+        /// does not trigger copy-on-write. Return `null` if the string is empty.
+        pub fn popFront(self: *Self) ?CharType {
+            const f = Self.getFormat();
+            switch (f) {
+                .utf8 => return self.popFrontUtf8(),
+                .byte => return self.popFrontByte(),
+            }
+        }
+
+        /// Remove the first ascii character from the string and return it.
+        pub fn popFrontByte(self: *Self) ?u8 {
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+                if (current_len == 0) return null;
+
+                const char = self.inner.inline_repr.data[0];
+                @memmove(self.inner.inline_repr.data[0 .. current_len - 1], self.inner.inline_repr.data[1..current_len]);
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len - 1) << 1)) | 1;
+                return char;
+            } else {
+                const current_len = self.inner.remote_repr.len;
+                if (current_len == 0) return null;
+                const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+                const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                const char = base_data_ptr[self.inner.remote_repr.offset];
+
+                self.inner.remote_repr.offset += 1;
+                self.inner.remote_repr.len -= 1;
+                const new_len = current_len - 1;
+
+                if (new_len <= 15) {
+                    self.remoteToInner(new_len);
+                }
+                return char;
+            }
+        }
+
+        /// Remove the first utf8 character from the string and return it.
+        pub fn popFrontUtf8(self: *Self) ?u21 {
+            const src = self.slice();
+            if (src.len == 0) return null;
+
+            const cp_len = blk: {
+                const l = std.unicode.utf8ByteSequenceLength(src[0]) catch 1;
+                break :blk @min(l, src.len);
+            };
+
+            const codepoint = std.unicode.utf8Decode(src[0..cp_len]) catch {
+                const b = self.popFrontByte() orelse return null;
+                return @as(u21, b);
+            };
+
+            if (self.isInline()) {
+                const cur = self.inner.inline_repr.tag_and_len >> 1;
+                @memmove(self.inner.inline_repr.data[0 .. cur - cp_len], self.inner.inline_repr.data[cp_len..cur]);
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((cur - cp_len) << 1)) | 1;
+            } else {
+                self.inner.remote_repr.offset += @as(u32, @intCast(cp_len));
+                self.inner.remote_repr.len -= @as(u32, @intCast(cp_len));
+
+                const new_len = self.inner.remote_repr.len;
+                if (new_len <= 15) {
+                    self.remoteToInner(new_len);
+                }
+            }
+
+            return codepoint;
+        }
+
+        /// Get the first character.
+        pub fn peek(self: Self) ?CharType {
+            const f = Self.getFormat();
+            switch (f) {
+                .byte => return self.peekByte(),
+                .utf8 => return self.peekUtf8(),
+            }
+        }
+
+        /// Get The first ascii character.
+        pub fn peekByte(self: Self) ?u8 {
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+                if (current_len == 0) return null;
+
+                return self.inner.inline_repr.data[0];
+            } else {
+                const current_len = self.inner.remote_repr.len;
+                if (current_len == 0) return null;
+                const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+                const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                return base_data_ptr[self.inner.remote_repr.offset];
+            }
+        }
+
+        /// Get The first utf8 character.
+        pub fn peekUtf8(self: Self) ?u21 {
+            const src = self.slice();
+            if (src.len == 0) return null;
+
+            const cp_len = blk: {
+                const l = std.unicode.utf8ByteSequenceLength(src[0]) catch 1;
+                break :blk @min(l, src.len);
+            };
+
+            return std.unicode.utf8Decode(src[0..cp_len]) catch {
+                const b = self.peekByte() orelse return null;
+                return @as(u21, b);
+            };
+        }
+
         /// Concatenate two strings and return a new `Strale` instance.
         pub fn concat(self: *const Self, alloc: Allocator, other: *const Self) !Self {
             const s1 = self.slice();

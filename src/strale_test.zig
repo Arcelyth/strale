@@ -400,6 +400,30 @@ test "pop substring" {
     );
 }
 
+// Pop front tests
+test "pop front inline" {
+    var s = try StraleBytes.initSlice(
+        testing.allocator,
+        "abc",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('a', s.popFront());
+    try testing.expectEqualStrings("bc", s.slice());
+}
+
+test "pop front heap" {
+    var s = try StraleBytes.initSlice(
+        testing.allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('a', s.peek());
+    try testing.expectEqual('a', s.popFront());
+    try testing.expectEqual(25, s.len());
+}
+
 test "empty string" {
     var s = StraleBytes.initEmpty();
     defer s.deinit();

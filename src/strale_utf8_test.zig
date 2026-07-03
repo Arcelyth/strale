@@ -36,6 +36,29 @@ test "pop utf8" {
     try testing.expectEqual(@as(u21, 'a'), c1);
 }
 
+test "pop utf8 front inline" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "你好",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('你', s.popFront());
+    try testing.expectEqualStrings("好", s.slice());
+}
+
+test "pop utf8 front heap" {
+    var s = try StraleUtf8.initSlice(
+        testing.allocator,
+        "その世界で死んだ人達ってさ、まあほら魔王軍に殺された訳じゃない",
+    );
+    defer s.deinit();
+
+    try testing.expectEqual('そ', s.peek());
+    try testing.expectEqual('そ', s.popFront());
+    try testing.expectEqualStrings("の世界で死んだ人達ってさ、まあほら魔王軍に殺された訳じゃない", s.slice());
+}
+
 test "utf8 remote to inline" {
     var s = try StraleUtf8.initSlice(testing.allocator, "this_is_a_long_string");
     defer s.deinit();

@@ -5,6 +5,11 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
     return struct {
         const Self = @This();
         const T = strale.Strale(format, atomicity);
+        pub const CharType = switch (T.getFormat()) {
+            .utf8 => u21,
+            .byte => u8,
+        };
+
         buffer: std.Deque(T),
         allocator: std.mem.Allocator,
 
@@ -23,22 +28,43 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             return self.buffer.len == 0;
         }
 
-        pub fn pop_front(self: *Self) ?T {
+        pub fn popFront(self: *Self) ?T {
             return self.buffer.popFront();
         }
 
-        pub fn pop_back(self: *Self) ?T {
+        pub fn popBack(self: *Self) ?T {
             return self.buffer.popBack();
         }
 
-        pub fn push_front(self: *Self, item: T) error{OutOfMemory}!void {
+        pub fn pushFront(self: *Self, item: T) error{OutOfMemory}!void {
             if (item.len() == 0) return;
             try self.buffer.pushFront(self.allocator, item);
         }
 
-        pub fn push_back(self: *Self, item: T) error{OutOfMemory}!void {
+        pub fn pushBack(self: *Self, item: T) error{OutOfMemory}!void {
             if (item.len() == 0) return;
             try self.buffer.pushBack(self.allocator, item);
+        }
+
+        pub fn peekChar(self: *Self) ?CharType {
+            if (self.buffer.front()) |f| {
+                return f.peek();
+            }
+            return null;
+        }
+
+        pub fn nextChar(self: *Self) ?CharType {
+            if (self.buffer.frontPtr()) |f| {
+                const c = f.popFront() orelse return null;
+
+                if (f.isEmpty()) {
+                    _ = self.buffer.popFront();
+                }
+
+                return c;
+            }
+
+            return null;
         }
     };
 }

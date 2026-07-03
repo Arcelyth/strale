@@ -12,12 +12,30 @@ test "pop" {
     defer s.deinit();
     var buf = try Buffer.init(alloc);
     defer buf.deinit();
-    try buf.push_back(s.clone());
+    try buf.pushBack(s.clone());
     try testing.expect(!buf.isEmpty());
 
-    var result = buf.pop_front().?;
+    var result = buf.popFront().?;
     defer result.deinit();
 
     try testing.expectEqualStrings("hello", result.slice());
     try testing.expect(buf.isEmpty());
+}
+
+test "buffer peek next char" {
+    const alloc = std.heap.page_allocator;
+    var s = try Str.initSlice(alloc, "hello");
+    defer s.deinit();
+    var s2 = try Str.initSlice(alloc, "world");
+    defer s.deinit();
+    var buf = try Buffer.init(alloc);
+    defer buf.deinit();
+    try buf.pushBack(s.clone());
+    try buf.pushBack(s2.clone());
+    try testing.expect(!buf.isEmpty());
+
+    try testing.expectEqual('h', buf.peekChar());
+    try testing.expectEqual('h', buf.nextChar());
+    var f = buf.popFront().?;
+    try testing.expectEqualStrings("ello", f.slice());
 }

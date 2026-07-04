@@ -5,8 +5,8 @@ comptime {
     _ = @import("buffer_deque_test.zig");
 }
 
-const strale = @import("strale.zig");
-const buffer = @import("buffer_deque.zig");
+pub const strale = @import("strale.zig");
+pub const buffer = @import("buffer_deque.zig");
 
 test {
     @import("std").testing.refAllDecls(@This());

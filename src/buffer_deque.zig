@@ -77,7 +77,7 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
 
         pub fn pushFrontSlice(self: *Self, slice: []const u8) !void {
             if (slice.len == 0) return;
-            const s = T.initSlice(self.allocator, slice);
+            const s = try T.initSlice(self.allocator, slice);
             try self.buffer.pushFront(self.allocator, s);
         }
 

@@ -3,8 +3,8 @@ const testing = std.testing;
 const strale = @import("strale.zig");
 const BufferDeque = @import("buffer_deque.zig").BufferDeque;
 
-const Buffer = BufferDeque(.byte, .not_atomic);
-const Str = strale.Strale(.byte, .not_atomic);
+const Buffer = BufferDeque(.byte, .not_atomic, false);
+const Str = strale.Strale(.byte, .not_atomic, false);
 
 test "pop" {
     const alloc = std.heap.page_allocator;

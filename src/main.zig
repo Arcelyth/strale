@@ -10,3 +10,12 @@ pub const Atomicity = strale.Atomicity;
 const bd = @import("buffer_deque.zig");
 pub const BufferDeque = bd.BufferDeque; 
 
+pub const buffer = @import("buffer_deque.zig");
+
+test {
+    @import("std").testing.refAllDecls(@This());
+    _ = @import("strale_test.zig");
+    _ = @import("strale_utf8_test.zig");
+    _ = @import("strale_atomic_test.zig");
+    _ = @import("buffer_deque_test.zig");
+}

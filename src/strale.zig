@@ -12,6 +12,8 @@ pub const Atomicity = enum {
     not_atomic,
 };
 
+pub var global_allocator: ?Allocator = null;
+
 /// A compact copy-on-write string type with Small String Optimization (SSO).
 ///
 /// `Strale` stores strings of up to 15 bytes directly inside the object
@@ -30,7 +32,7 @@ pub const Atomicity = enum {
 ///     performance in single-threaded environments.
 ///   - `.atomic`: use atomic reference counting, allowing instances
 ///     to be safely shared between threads.
-pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
+pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime use_global_alloc: bool) type {
     return struct {
         const Self = @This();
         const init_capacity = 32;
@@ -55,11 +57,17 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             .atomic => std.atomic.Value(u32),
         };
 
-        const Header = struct {
-            alloc: Allocator,
-            ref_count: RefType,
-            capacity: u32,
-        };
+        const Header = if (use_global_alloc)
+            struct {
+                ref_count: RefType,
+                capacity: u32,
+            }
+        else
+            struct {
+                alloc: Allocator,
+                ref_count: RefType,
+                capacity: u32,
+            };
 
         const init_ref = switch (Self.getAtomicity()) {
             .not_atomic => 1,
@@ -85,7 +93,12 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
         ///
         /// For longer strings, a shared heap allocation is created containing
         /// both a reference-counted header and the string data.
-        pub fn initSlice(alloc: Allocator, src: []const u8) !Self {
+        pub const initSlice = if (use_global_alloc)
+            initSliceGlobal
+        else
+            initSliceAlloc;
+
+        fn initSliceAlloc(alloc: Allocator, src: []const u8) !Self {
             if (src.len <= 15) {
                 var self = Self{
                     .inner = .{
@@ -123,6 +136,43 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             }
         }
 
+        fn initSliceGlobal(src: []const u8) !Self {
+            if (src.len <= 15) {
+                var self = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(src.len << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                @memcpy(self.inner.inline_repr.data[0..src.len], src);
+                return self;
+            } else {
+                const total_size = @sizeOf(Header) + src.len;
+                const bytes = try global_allocator.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                header.* = .{
+                    .ref_count = init_ref,
+                    .capacity = @intCast(src.len),
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                @memcpy(data_ptr, src);
+
+                return Self{
+                    .inner = .{
+                        .remote_repr = .{
+                            .ptr = @intFromPtr(header),
+                            .offset = 0,
+                            .len = @intCast(src.len),
+                        },
+                    },
+                };
+            }
+        }
+
         /// Release the resources owned by this string.
         ///
         /// Inline strings require no cleanup.
@@ -135,7 +185,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
             if (Self.refDec(&header.ref_count)) {
                 const total_size = @sizeOf(Header) + header.capacity;
-                const alloc = header.alloc;
+                const alloc = if (use_global_alloc) Self.getGlobalAlloc() else header.alloc;
                 const bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..total_size];
                 alloc.free(bytes);
             }
@@ -279,15 +329,32 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             if (Self.refEq(header.ref_count, 1)) return;
 
             const current_data = self.slice();
-            const alloc = header.alloc;
-            const new_data = try Self.initSlice(alloc, current_data);
+            const new_data = if (use_global_alloc)
+                try Self.initSlice(current_data)
+            else
+                try Self.initSlice(header.alloc, current_data);
 
             _ = Self.refDec(&header.ref_count);
             self.* = new_data;
         }
 
         /// Append a character to the string and its behaviour depends on the format.
-        pub fn push(
+        pub const push = if (use_global_alloc)
+            pushGlobal
+        else
+            pushAlloc;
+
+        pub const pushByte = if (use_global_alloc)
+            pushByteGlobal
+        else
+            pushByteAlloc;
+
+        pub const pushUtf8 = if (use_global_alloc)
+            pushUtf8Global
+        else
+            pushUtf8Alloc;
+
+        fn pushAlloc(
             self: *Self,
             alloc: Allocator,
             char: comptime_int,
@@ -295,16 +362,16 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             const f = Self.getFormat();
             switch (f) {
                 .utf8 => {
-                    try self.pushUtf8(alloc, @as(u21, @intCast(char)));
+                    try self.pushUtf8Alloc(alloc, @as(u21, @intCast(char)));
                 },
                 .byte => {
-                    try self.pushByte(alloc, @as(u8, @intCast(char)));
+                    try self.pushByteAlloc(alloc, @as(u8, @intCast(char)));
                 },
             }
         }
 
         /// Append a single byte to the string.
-        pub fn pushByte(self: *Self, alloc: Allocator, char: u8) !void {
+        pub fn pushByteAlloc(self: *Self, alloc: Allocator, char: u8) !void {
             if (self.isInline()) {
                 const current_len = self.inner.inline_repr.tag_and_len >> 1;
 
@@ -384,7 +451,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
         }
 
         /// Append a single UTF-8 codepoint to the string.
-        pub fn pushUtf8(self: *Self, alloc: Allocator, codepoint: u21) !void {
+        pub fn pushUtf8Alloc(self: *Self, alloc: Allocator, codepoint: u21) !void {
             var buf: [4]u8 = undefined;
             const n = try std.unicode.utf8Encode(codepoint, &buf);
             const utf8_bytes = buf[0..n];
@@ -456,6 +523,178 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
                     const old_total_size = @sizeOf(Header) + header.capacity;
                     const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
                     old_alloc.free(old_bytes);
+                }
+
+                self.inner.remote_repr = .{
+                    .ptr = @intFromPtr(new_header),
+                    .offset = 0,
+                    .len = current_len + n_u32,
+                };
+            }
+        }
+
+        fn pushGlobal(
+            self: *Self,
+            char: comptime_int,
+        ) !void {
+            const f = Self.getFormat();
+            switch (f) {
+                .utf8 => {
+                    try self.pushUtf8Global(@as(u21, @intCast(char)));
+                },
+                .byte => {
+                    try self.pushByte(@as(u8, @intCast(char)));
+                },
+            }
+        }
+
+        /// Append a single byte to the string.
+        fn pushByteGlobal(self: *Self, char: u8) !void {
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+
+                if (current_len < 15) {
+                    self.inner.inline_repr.data[current_len] = char;
+                    self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len + 1) << 1)) | 1;
+                    return;
+                } else {
+                    const new_capacity = init_capacity;
+                    const total_size = @sizeOf(Header) + new_capacity;
+                    const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                    const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                    header.* = .{
+                        .ref_count = init_ref,
+                        .capacity = new_capacity,
+                    };
+
+                    const data_ptr = bytes[@sizeOf(Header)..];
+                    @memcpy(data_ptr[0..15], self.inner.inline_repr.data[0..15]);
+                    data_ptr[15] = char;
+
+                    self.inner = .{
+                        .remote_repr = .{
+                            .ptr = @intFromPtr(header),
+                            .offset = 0,
+                            .len = 16,
+                        },
+                    };
+                    return;
+                }
+            }
+
+            const current_len = self.inner.remote_repr.len;
+            const current_offset = self.inner.remote_repr.offset;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+
+            // not shared
+            if (Self.refEq(header.ref_count, 1) and (current_offset + current_len) < header.capacity) {
+                const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                base_data_ptr[current_offset + current_len] = char;
+                self.inner.remote_repr.len += 1;
+            } else {
+                // shared
+                const current_slice = self.slice();
+
+                const new_capacity = @max((current_len + 1) * cap_factor, @as(u32, 32));
+                const total_size = @sizeOf(Header) + new_capacity;
+
+                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const new_header = @as(*Header, @ptrCast(bytes.ptr));
+
+                new_header.* = .{
+                    .ref_count = init_ref,
+                    .capacity = new_capacity,
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                @memcpy(data_ptr[0..current_len], current_slice);
+                data_ptr[current_len] = char;
+
+                if (Self.refDec(&header.ref_count)) {
+                    const old_total_size = @sizeOf(Header) + header.capacity;
+                    const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
+                    Self.getGlobalAlloc().free(old_bytes);
+                }
+
+                self.inner.remote_repr = .{
+                    .ptr = @intFromPtr(new_header),
+                    .offset = 0,
+                    .len = current_len + 1,
+                };
+            }
+        }
+
+        /// Append a single UTF-8 codepoint to the string.
+        fn pushUtf8Global(self: *Self, codepoint: u21) !void {
+            var buf: [4]u8 = undefined;
+            const n = try std.unicode.utf8Encode(codepoint, &buf);
+            const utf8_bytes = buf[0..n];
+            const n_u32 = @as(u32, @intCast(n));
+
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+
+                if (current_len + n <= 15) {
+                    @memcpy(self.inner.inline_repr.data[current_len .. current_len + n], utf8_bytes);
+                    self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len + n) << 1)) | 1;
+                    return;
+                } else {
+                    const new_capacity = init_capacity;
+                    const total_size = @sizeOf(Header) + new_capacity;
+                    const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                    const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                    header.* = .{
+                        .ref_count = init_ref,
+                        .capacity = new_capacity,
+                    };
+
+                    const data_ptr = bytes[@sizeOf(Header)..];
+                    @memcpy(data_ptr[0..current_len], self.inner.inline_repr.data[0..current_len]);
+                    @memcpy(data_ptr[current_len .. current_len + n], utf8_bytes);
+
+                    self.inner = .{
+                        .remote_repr = .{
+                            .ptr = @intFromPtr(header),
+                            .offset = 0,
+                            .len = @as(u32, @intCast(current_len + n)),
+                        },
+                    };
+                    return;
+                }
+            }
+
+            const current_len = self.inner.remote_repr.len;
+            const current_offset = self.inner.remote_repr.offset;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+
+            if (Self.refEq(header.ref_count, 1) and (current_offset + current_len + n_u32) <= header.capacity) {
+                const base_data_ptr = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                @memcpy(base_data_ptr[current_offset + current_len ..][0..n], utf8_bytes);
+                self.inner.remote_repr.len += n_u32;
+            } else {
+                const current_slice = self.slice();
+
+                const new_capacity = @max((current_len + n_u32) * cap_factor, @as(u32, 32));
+                const total_size = @sizeOf(Header) + new_capacity;
+
+                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const new_header = @as(*Header, @ptrCast(bytes.ptr));
+
+                new_header.* = .{
+                    .ref_count = init_ref,
+                    .capacity = new_capacity,
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                @memcpy(data_ptr[0..current_len], current_slice);
+                @memcpy(data_ptr[current_len .. current_len + n], utf8_bytes);
+
+                if (Self.refDec(&header.ref_count)) {
+                    const old_total_size = @sizeOf(Header) + header.capacity;
+                    const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
+                    Self.getGlobalAlloc().free(old_bytes);
                 }
 
                 self.inner.remote_repr = .{
@@ -647,7 +886,9 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
         }
 
         /// Concatenate two strings and return a new `Strale` instance.
-        pub fn concat(self: *const Self, alloc: Allocator, other: *const Self) !Self {
+        pub const concat = if (use_global_alloc) concatGlobal else concatAlloc;
+
+        fn concatAlloc(self: *const Self, alloc: Allocator, other: *const Self) !Self {
             const s1 = self.slice();
             const s2 = other.slice();
             const total_len = s1.len + s2.len;
@@ -671,6 +912,49 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
 
                 header.* = .{
                     .alloc = alloc,
+                    .ref_count = init_ref,
+                    .capacity = @intCast(total_len),
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                @memcpy(data_ptr[0..s1.len], s1);
+                @memcpy(data_ptr[s1.len..total_len], s2);
+
+                return Self{
+                    .inner = .{
+                        .remote_repr = .{
+                            .ptr = @intFromPtr(header),
+                            .offset = 0,
+                            .len = @intCast(total_len),
+                        },
+                    },
+                };
+            }
+        }
+
+        fn concatGlobal(self: *const Self, other: *const Self) !Self {
+            const s1 = self.slice();
+            const s2 = other.slice();
+            const total_len = s1.len + s2.len;
+
+            if (total_len <= 15) {
+                var res = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(total_len << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                @memcpy(res.inner.inline_repr.data[0..s1.len], s1);
+                @memcpy(res.inner.inline_repr.data[s1.len..total_len], s2);
+                return res;
+            } else {
+                const total_size = @sizeOf(Header) + total_len;
+                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                header.* = .{
                     .ref_count = init_ref,
                     .capacity = @intCast(total_len),
                 };
@@ -933,7 +1217,9 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
         }
 
         /// Return a new string consisting of this string repeated `n` times.
-        pub fn repeat(self: *const Self, alloc: Allocator, n: usize) !Self {
+        pub const repeat = if (use_global_alloc) repeatGlobal else repeatAlloc;
+
+        fn repeatAlloc(self: *const Self, alloc: Allocator, n: usize) !Self {
             const src = self.slice();
             if (n == 0 or src.len == 0) return initEmpty();
 
@@ -982,8 +1268,58 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             }
         }
 
+        fn repeatGlobal(self: *const Self, n: usize) !Self {
+            const src = self.slice();
+            if (n == 0 or src.len == 0) return initEmpty();
+
+            const total_len = src.len * n;
+
+            if (total_len <= 15) {
+                var res = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(total_len << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                var i: usize = 0;
+                while (i < n) : (i += 1) {
+                    @memcpy(res.inner.inline_repr.data[i * src.len .. (i + 1) * src.len], src);
+                }
+                return res;
+            } else {
+                const total_size = @sizeOf(Header) + total_len;
+                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const header = @as(*Header, @ptrCast(bytes.ptr));
+
+                header.* = .{
+                    .ref_count = init_ref,
+                    .capacity = @intCast(total_len),
+                };
+
+                const data_ptr = bytes[@sizeOf(Header)..];
+                var i: usize = 0;
+                while (i < n) : (i += 1) {
+                    @memcpy(data_ptr[i * src.len .. (i + 1) * src.len], src);
+                }
+
+                return Self{
+                    .inner = .{
+                        .remote_repr = .{
+                            .ptr = @intFromPtr(header),
+                            .offset = 0,
+                            .len = @intCast(total_len),
+                        },
+                    },
+                };
+            }
+        }
+
         /// Convert all ASCII characters to lowercase.
-        pub fn toLowercase(self: *const Self, alloc: Allocator) !Self {
+        pub const toLowercase = if (use_global_alloc) toLowercaseGlobal else toLowercaseAlloc;
+
+        fn toLowercaseAlloc(self: *const Self, alloc: Allocator) !Self {
             const src = self.slice();
             const length = src.len;
 
@@ -1027,8 +1363,53 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             };
         }
 
+        fn toLowercaseGlobal(self: *const Self) !Self {
+            const src = self.slice();
+            const length = src.len;
+
+            if (length <= 15) {
+                var res = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                for (src, 0..) |c, i| {
+                    res.inner.inline_repr.data[i] = std.ascii.toLower(c);
+                }
+                return res;
+            }
+
+            const total_size = @sizeOf(Header) + length;
+            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const header = @as(*Header, @ptrCast(bytes.ptr));
+            header.* = .{
+                .ref_count = init_ref,
+                .capacity = @intCast(length),
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..][0..length];
+            for (src, 0..) |c, i| {
+                data_ptr[i] = std.ascii.toLower(c);
+            }
+
+            return Self{
+                .inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = @intCast(length),
+                    },
+                },
+            };
+        }
+
         /// Convert all ASCII characters to uppercase.
-        pub fn toUppercase(self: *const Self, alloc: Allocator) !Self {
+        pub const toUppercase = if (use_global_alloc) toUppercaseGlobal else toUppercaseAlloc;
+
+        fn toUppercaseAlloc(self: *const Self, alloc: Allocator) !Self {
             const src = self.slice();
             const length = src.len;
 
@@ -1072,9 +1453,54 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             };
         }
 
+        fn toUppercaseGlobal(self: *const Self) !Self {
+            const src = self.slice();
+            const length = src.len;
+
+            if (length <= 15) {
+                var res = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                for (src, 0..) |c, i| {
+                    res.inner.inline_repr.data[i] = std.ascii.toUpper(c);
+                }
+                return res;
+            }
+
+            const total_size = @sizeOf(Header) + length;
+            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const header = @as(*Header, @ptrCast(bytes.ptr));
+            header.* = .{
+                .ref_count = init_ref,
+                .capacity = @intCast(length),
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..][0..length];
+            for (src, 0..) |c, i| {
+                data_ptr[i] = std.ascii.toUpper(c);
+            }
+
+            return Self{
+                .inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = @intCast(length),
+                    },
+                },
+            };
+        }
+
         /// Convert the first ASCII character to uppercase and all
         /// remaining ASCII characters to lowercase.
-        pub fn toCapitalized(self: *const Self, alloc: Allocator) !Self {
+        pub const toCapitalized = if (use_global_alloc) toCapitalizedGlobal else toCapitalizedAlloc;
+
+        fn toCapitalizedAlloc(self: *const Self, alloc: Allocator) !Self {
             const src = self.slice();
             const length = src.len;
 
@@ -1099,6 +1525,51 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .alloc = alloc,
+                .ref_count = init_ref,
+                .capacity = @intCast(length),
+            };
+
+            const data_ptr = bytes[@sizeOf(Header)..][0..length];
+            data_ptr[0] = std.ascii.toUpper(src[0]);
+            for (src[1..], 1..) |c, i| {
+                data_ptr[i] = std.ascii.toLower(c);
+            }
+
+            return Self{
+                .inner = .{
+                    .remote_repr = .{
+                        .ptr = @intFromPtr(header),
+                        .offset = 0,
+                        .len = @intCast(length),
+                    },
+                },
+            };
+        }
+
+        fn toCapitalizedGlobal(self: *const Self) !Self {
+            const src = self.slice();
+            const length = src.len;
+
+            if (length <= 15) {
+                var res = Self{
+                    .inner = .{
+                        .inline_repr = .{
+                            .tag_and_len = @as(u8, @intCast(length << 1)) | 1,
+                            .data = undefined,
+                        },
+                    },
+                };
+                res.inner.inline_repr.data[0] = std.ascii.toUpper(src[0]);
+                for (src[1..], 1..) |c, i| {
+                    res.inner.inline_repr.data[i] = std.ascii.toLower(c);
+                }
+                return res;
+            }
+
+            const total_size = @sizeOf(Header) + length;
+            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const header = @as(*Header, @ptrCast(bytes.ptr));
+            header.* = .{
                 .ref_count = init_ref,
                 .capacity = @intCast(length),
             };
@@ -1180,11 +1651,15 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity) type {
                 },
             };
         }
+
+        pub inline fn getGlobalAlloc() Allocator {
+            return global_allocator orelse @panic("Strale allocator not initialized");
+        }
     };
 }
 
-pub const StraleBytes = Strale(.byte, .not_atomic);
-pub const StraleUtf8 = Strale(.utf8, .not_atomic);
+pub const StraleBytes = Strale(.byte, .not_atomic, false);
+pub const StraleUtf8 = Strale(.utf8, .not_atomic, false);
 
-pub const StraleAtomic = Strale(.byte, .atomic);
-pub const StraleUtf8Atomic = Strale(.utf8, .atomic);
+pub const StraleAtomic = Strale(.byte, .atomic, false);
+pub const StraleUtf8Atomic = Strale(.utf8, .atomic, false);

@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
 
     // --- test
     const test_module = b.addModule("strale-test", .{
-        .root_source_file = b.path("src/tests.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });

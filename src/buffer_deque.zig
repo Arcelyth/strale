@@ -1,10 +1,10 @@
 const strale = @import("strale.zig");
 const std = @import("std");
 
-pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.Atomicity) type {
+pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.Atomicity, comptime use_global_alloc: bool) type {
     return struct {
         const Self = @This();
-        const T = strale.Strale(format, atomicity);
+        const T = strale.Strale(format, atomicity, use_global_alloc);
         pub const CharType = switch (T.getFormat()) {
             .utf8 => u21,
             .byte => u8,

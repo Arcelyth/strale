@@ -191,6 +191,13 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
         }
 
+        /// Set string to empty.
+        pub fn clear(self: *Self) void {
+            self.deinit();
+
+            self.* = Self.initEmpty();
+        }
+
         /// Return the reference count if 'self' is not inline.
         pub fn ref_count(self: *const Self) ?u32 {
             if (self.isInline()) return null;

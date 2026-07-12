@@ -19,6 +19,8 @@ test "inline string" {
 
     try testing.expect(s.isInline());
     try testing.expectEqualStrings("hello", s.slice());
+    s.clear();
+    try testing.expectEqualStrings("", s.slice());
 }
 
 test "inline 15 bytes string" {
@@ -47,6 +49,9 @@ test "heap 16 bytes string" {
 
     try testing.expect(!s.isInline());
     try testing.expectEqualStrings(str, s.slice());
+    s.clear();
+    try testing.expect(s.isInline());
+    try testing.expectEqualStrings("", s.slice());
 }
 
 test "long string" {

@@ -10,6 +10,7 @@ Strale combines:
 - Copy-on-write mutation
 - Optional UTF-8 support
 - Optional thread-safety support 
+- Support global allocator to further reduce heap memory usage
 
 ## Installation
 

@@ -17,5 +17,6 @@ test {
     _ = @import("strale_test.zig");
     _ = @import("strale_utf8_test.zig");
     _ = @import("strale_atomic_test.zig");
+    _ = @import("strale_global_test.zig");
     _ = @import("buffer_deque_test.zig");
 }

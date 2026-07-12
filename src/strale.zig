@@ -150,7 +150,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 return self;
             } else {
                 const total_size = @sizeOf(Header) + src.len;
-                const bytes = try global_allocator.allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const header = @as(*Header, @ptrCast(bytes.ptr));
 
                 header.* = .{
@@ -1663,3 +1663,9 @@ pub const StraleUtf8 = Strale(.utf8, .not_atomic, false);
 
 pub const StraleAtomic = Strale(.byte, .atomic, false);
 pub const StraleUtf8Atomic = Strale(.utf8, .atomic, false);
+
+pub const StraleBytesGlobal = Strale(.byte, .not_atomic, true);
+pub const StraleUtf8Global = Strale(.utf8, .not_atomic, true);
+
+pub const StraleAtomicGlobal = Strale(.byte, .atomic, true);
+pub const StraleUtf8AtomicGlobal = Strale(.utf8, .atomic, true);

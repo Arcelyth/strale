@@ -4,6 +4,11 @@ pub const StraleBytes = strale.StraleBytes;
 pub const StraleUtf8 = strale.StraleUtf8;
 pub const StraleAtomic = strale.StraleAtomic;
 pub const StraleUtf8Atomic = strale.StraleUtf8Atomic;
+pub const StraleBytesGlobal = strale.StraleBytesGlobal;
+pub const StraleUtf8Global = strale.StraleUtf8Global;
+pub const StraleAtomicGlobal = strale.StraleAtomicGlobal;
+pub const StraleUtf8AtomicGlobal = strale.StraleUtf8AtomicGlobal;
+
 pub const Format = strale.Format;
 pub const Atomicity = strale.Atomicity;
 

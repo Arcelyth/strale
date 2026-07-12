@@ -287,7 +287,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         ///
         /// Longer substrings share the underlying allocation by incrementing the
         /// reference count and adjusting the slice offset.
-        pub fn substr(self: *const Self, offset: comptime_int, length: comptime_int) Self {
+        pub fn substr(self: *const Self, offset: u32, length: u32) Self {
             const current = self.slice();
 
             std.debug.assert(offset + length <= current.len);
@@ -364,7 +364,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         fn pushAlloc(
             self: *Self,
             alloc: Allocator,
-            char: comptime_int,
+            char: CharType,
         ) !void {
             const f = Self.getFormat();
             switch (f) {
@@ -542,7 +542,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
 
         fn pushGlobal(
             self: *Self,
-            char: comptime_int,
+            char: CharType,
         ) !void {
             const f = Self.getFormat();
             switch (f) {

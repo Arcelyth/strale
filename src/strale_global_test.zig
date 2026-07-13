@@ -7,7 +7,7 @@ const StraleBytes = strale.StraleBytesGlobal;
 //strale.global_allocator = testing.allocator;
 
 test "global: heap 16 bytes string" {
-    strale.global_allocator = testing.allocator;
+    strale.setGlobalAlloc(testing.allocator);
     const str = "123456789abcdefg";
 
     comptime {
@@ -22,7 +22,7 @@ test "global: heap 16 bytes string" {
 }
 
 test "global: long string" {
-    strale.global_allocator = testing.allocator;
+    strale.setGlobalAlloc(testing.allocator);
     const str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     var s = try StraleBytes.initSlice(str);
@@ -34,7 +34,7 @@ test "global: long string" {
 
 // COW tests
 test "global: cow unique allocation" {
-    strale.global_allocator = testing.allocator;
+    strale.setGlobalAlloc(testing.allocator);
     var s = try StraleBytes.initSlice(
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -51,7 +51,7 @@ test "global: cow unique allocation" {
 }
 
 test "global: cow shared allocation" {
-    strale.global_allocator = testing.allocator;
+    strale.setGlobalAlloc(testing.allocator);
     var s1 = try StraleBytes.initSlice(
         "abcdefghijklmnopqrstuvwxyz",
     );
@@ -75,7 +75,7 @@ test "global: cow shared allocation" {
 }
 
 test "global: push converts inline to heap" {
-    strale.global_allocator = testing.allocator;
+    strale.setGlobalAlloc(testing.allocator);
     var s = try StraleBytes.initSlice(
         "123456789abcdef",
     );
@@ -92,6 +92,7 @@ test "global: push converts inline to heap" {
 }
 
 test "global: push heap" {
+    strale.setGlobalAlloc(testing.allocator);
     var s = try StraleBytes.initSlice(
         "123456789abcdefg",
     );

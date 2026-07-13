@@ -3,7 +3,7 @@
 A memory efficient compact, copy-on-write (COW) string type for Zig. <br>
 The type occupies **16 bytes** on 64-bit platforms.
 
-Strale combines:
+Features:
 - Small String Optimization (SSO)
 - Reference counting
 - Zero-copy substring views

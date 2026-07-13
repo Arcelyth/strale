@@ -14,6 +14,14 @@ pub const Atomicity = enum {
 
 pub var global_allocator: ?Allocator = null;
 
+pub fn setGlobalAlloc(alloc: Allocator) void {
+    global_allocator = alloc;
+}
+
+pub inline fn getGlobalAlloc() Allocator {
+    return global_allocator orelse @panic("Strale allocator not initialized");
+}
+
 /// A compact copy-on-write string type with Small String Optimization (SSO).
 ///
 /// `Strale` stores strings of up to 15 bytes directly inside the object
@@ -150,7 +158,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 return self;
             } else {
                 const total_size = @sizeOf(Header) + src.len;
-                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const header = @as(*Header, @ptrCast(bytes.ptr));
 
                 header.* = .{
@@ -185,7 +193,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
             if (Self.refDec(&header.ref_count)) {
                 const total_size = @sizeOf(Header) + header.capacity;
-                const alloc = if (use_global_alloc) Self.getGlobalAlloc() else header.alloc;
+                const alloc = if (use_global_alloc) getGlobalAlloc() else header.alloc;
                 const bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..total_size];
                 alloc.free(bytes);
             }
@@ -567,7 +575,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 } else {
                     const new_capacity = init_capacity;
                     const total_size = @sizeOf(Header) + new_capacity;
-                    const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                    const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                     const header = @as(*Header, @ptrCast(bytes.ptr));
 
                     header.* = .{
@@ -606,7 +614,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 const new_capacity = @max((current_len + 1) * cap_factor, @as(u32, 32));
                 const total_size = @sizeOf(Header) + new_capacity;
 
-                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const new_header = @as(*Header, @ptrCast(bytes.ptr));
 
                 new_header.* = .{
@@ -621,7 +629,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 if (Self.refDec(&header.ref_count)) {
                     const old_total_size = @sizeOf(Header) + header.capacity;
                     const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
-                    Self.getGlobalAlloc().free(old_bytes);
+                    getGlobalAlloc().free(old_bytes);
                 }
 
                 self.inner.remote_repr = .{
@@ -649,7 +657,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 } else {
                     const new_capacity = init_capacity;
                     const total_size = @sizeOf(Header) + new_capacity;
-                    const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                    const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                     const header = @as(*Header, @ptrCast(bytes.ptr));
 
                     header.* = .{
@@ -686,7 +694,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 const new_capacity = @max((current_len + n_u32) * cap_factor, @as(u32, 32));
                 const total_size = @sizeOf(Header) + new_capacity;
 
-                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const new_header = @as(*Header, @ptrCast(bytes.ptr));
 
                 new_header.* = .{
@@ -701,7 +709,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 if (Self.refDec(&header.ref_count)) {
                     const old_total_size = @sizeOf(Header) + header.capacity;
                     const old_bytes = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total_size];
-                    Self.getGlobalAlloc().free(old_bytes);
+                    getGlobalAlloc().free(old_bytes);
                 }
 
                 self.inner.remote_repr = .{
@@ -958,7 +966,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 return res;
             } else {
                 const total_size = @sizeOf(Header) + total_len;
-                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const header = @as(*Header, @ptrCast(bytes.ptr));
 
                 header.* = .{
@@ -1297,7 +1305,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 return res;
             } else {
                 const total_size = @sizeOf(Header) + total_len;
-                const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+                const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
                 const header = @as(*Header, @ptrCast(bytes.ptr));
 
                 header.* = .{
@@ -1390,7 +1398,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
 
             const total_size = @sizeOf(Header) + length;
-            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .ref_count = init_ref,
@@ -1480,7 +1488,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
 
             const total_size = @sizeOf(Header) + length;
-            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .ref_count = init_ref,
@@ -1574,7 +1582,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
 
             const total_size = @sizeOf(Header) + length;
-            const bytes = try Self.getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
+            const bytes = try getGlobalAlloc().allocWithOptions(u8, total_size, mem.Alignment.of(Header), null);
             const header = @as(*Header, @ptrCast(bytes.ptr));
             header.* = .{
                 .ref_count = init_ref,
@@ -1657,10 +1665,6 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                     .data = buf,
                 },
             };
-        }
-
-        pub inline fn getGlobalAlloc() Allocator {
-            return global_allocator orelse @panic("Strale allocator not initialized");
         }
     };
 }

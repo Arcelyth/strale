@@ -8,6 +8,7 @@ pub const StraleBytesGlobal = strale.StraleBytesGlobal;
 pub const StraleUtf8Global = strale.StraleUtf8Global;
 pub const StraleAtomicGlobal = strale.StraleAtomicGlobal;
 pub const StraleUtf8AtomicGlobal = strale.StraleUtf8AtomicGlobal;
+pub const setGlobalAlloc = strale.setGlobalAlloc;
 
 pub const Format = strale.Format;
 pub const Atomicity = strale.Atomicity;

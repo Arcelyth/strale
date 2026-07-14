@@ -898,6 +898,200 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
         }
 
+        /// Append a UTF-8/byte slice to the end of the string.
+        pub const append = if (use_global_alloc)
+            appendGlobal
+        else
+            appendAlloc;
+
+        pub fn appendAlloc(self: *Self, alloc: Allocator, bytes: []const u8) !void {
+            if (bytes.len == 0) return;
+
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+
+                if (current_len + bytes.len <= 15) {
+                    @memcpy(
+                        self.inner.inline_repr.data[current_len .. current_len + bytes.len],
+                        bytes,
+                    );
+
+                    self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len + bytes.len) << 1)) | 1;
+                    return;
+                }
+                const new_capacity = @max(init_capacity, current_len + bytes.len);
+                const total_size = @sizeOf(Header) + new_capacity;
+
+                const m = try alloc.allocWithOptions(
+                    u8,
+                    total_size,
+                    std.mem.Alignment.of(Header),
+                    null,
+                );
+                const header = @as(*Header, @ptrCast(m.ptr));
+                header.* = .{
+                    .alloc = alloc,
+                    .ref_count = init_ref,
+                    .capacity = @intCast(new_capacity),
+                };
+
+                const data = m[@sizeOf(Header)..];
+                @memcpy(data[0..current_len], self.inner.inline_repr.data[0..current_len]);
+                @memcpy(data[current_len .. current_len + bytes.len], bytes);
+                self.inner.remote_repr = .{
+                    .ptr = @intFromPtr(header),
+                    .offset = 0,
+                    .len = @intCast(current_len + bytes.len),
+                };
+                return;
+            }
+
+            const current_len = self.inner.remote_repr.len;
+            const current_offset = self.inner.remote_repr.offset;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+
+            // unique && enough capacity
+            if (Self.refEq(header.ref_count, 1) and current_offset + current_len + bytes.len <= header.capacity) {
+                const base = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                @memcpy(
+                    base[current_offset + current_len ..][0..bytes.len],
+                    bytes,
+                );
+                self.inner.remote_repr.len += @intCast(bytes.len);
+                return;
+            }
+
+            // grow / cow
+            const old_alloc = header.alloc;
+            const old_slice = self.slice();
+
+            const needed = current_len + bytes.len;
+            const new_capacity = @max(needed * cap_factor, @as(usize, init_capacity));
+            const total_size = @sizeOf(Header) + new_capacity;
+            const m = try old_alloc.allocWithOptions(
+                u8,
+                total_size,
+                std.mem.Alignment.of(Header),
+                null,
+            );
+
+            const new_header = @as(*Header, @ptrCast(m.ptr));
+            new_header.* = .{
+                .alloc = old_alloc,
+                .ref_count = init_ref,
+                .capacity = @intCast(new_capacity),
+            };
+
+            const data = m[@sizeOf(Header)..];
+            @memcpy(data[0..current_len], old_slice);
+            @memcpy(data[current_len .. current_len + bytes.len], bytes);
+
+            if (Self.refDec(&header.ref_count)) {
+                const old_total = @sizeOf(Header) + header.capacity;
+                const raw = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total];
+                old_alloc.free(raw);
+            }
+            self.inner.remote_repr = .{
+                .ptr = @intFromPtr(new_header),
+                .offset = 0,
+                .len = @intCast(needed),
+            };
+        }
+
+        pub fn appendGlobal(self: *Self, bytes: []const u8) !void {
+            if (bytes.len == 0) return;
+
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+                if (current_len + bytes.len <= 15) {
+                    @memcpy(
+                        self.inner.inline_repr.data[current_len .. current_len + bytes.len],
+                        bytes,
+                    );
+
+                    self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len + bytes.len) << 1)) | 1;
+                    return;
+                }
+                const new_capacity = @max(init_capacity, current_len + bytes.len);
+                const total_size = @sizeOf(Header) + new_capacity;
+                const m = try self.getGlobalAlloc().allocWithOptions(
+                    u8,
+                    total_size,
+                    std.mem.Alignment.of(Header),
+                    null,
+                );
+
+                const header = @as(*Header, @ptrCast(m.ptr));
+                header.* = .{
+                    .ref_count = init_ref,
+                    .capacity = @intCast(new_capacity),
+                };
+
+                const data = m[@sizeOf(Header)..];
+                @memcpy(data[0..current_len], self.inner.inline_repr.data[0..current_len]);
+                @memcpy(data[current_len .. current_len + bytes.len], bytes);
+
+                self.inner.remote_repr = .{
+                    .ptr = @intFromPtr(header),
+                    .offset = 0,
+                    .len = @intCast(current_len + bytes.len),
+                };
+                return;
+            }
+
+            const current_len = self.inner.remote_repr.len;
+            const current_offset = self.inner.remote_repr.offset;
+            const header = @as(*Header, @ptrFromInt(self.inner.remote_repr.ptr));
+
+            // unique && enough capacity
+            if (Self.refEq(header.ref_count, 1) and current_offset + current_len + bytes.len <= header.capacity) {
+                const base = @as([*]u8, @ptrCast(header)) + @sizeOf(Header);
+                @memcpy(
+                    base[current_offset + current_len ..][0..bytes.len],
+                    bytes,
+                );
+                self.inner.remote_repr.len += @intCast(bytes.len);
+                return;
+            }
+
+            // grow / cow
+            const old_alloc = self.getGlobalAlloc();
+            const old_slice = self.slice();
+
+            const needed = current_len + bytes.len;
+            const new_capacity = @max(needed * cap_factor, @as(usize, init_capacity));
+            const total_size = @sizeOf(Header) + new_capacity;
+
+            const m = try old_alloc.allocWithOptions(
+                u8,
+                total_size,
+                std.mem.Alignment.of(Header),
+                null,
+            );
+
+            const new_header = @as(*Header, @ptrCast(m.ptr));
+            new_header.* = .{
+                .ref_count = init_ref,
+                .capacity = @intCast(new_capacity),
+            };
+
+            const data = m[@sizeOf(Header)..];
+            @memcpy(data[0..current_len], old_slice);
+            @memcpy(data[current_len .. current_len + bytes.len], bytes);
+
+            if (Self.refDec(&header.ref_count)) {
+                const old_total = @sizeOf(Header) + header.capacity;
+                const raw = @as([*]align(@alignOf(Header)) u8, @ptrCast(header))[0..old_total];
+                old_alloc.free(raw);
+            }
+
+            self.inner.remote_repr = .{
+                .ptr = @intFromPtr(new_header),
+                .offset = 0,
+                .len = @intCast(needed),
+            };
+        }
+
         /// Get the first character.
         pub const peek = if (CharType == u21)
             peekUtf8

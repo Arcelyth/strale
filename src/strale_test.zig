@@ -469,6 +469,34 @@ test "drop front heap to inline" {
     try testing.expect(str.isInline());
 }
 
+// Append tests
+test "append inline" {
+    var str = try StraleBytes.initSlice(
+        testing.allocator,
+        "abc",
+    );
+
+    defer str.deinit();
+
+    try str.append(testing.allocator, "def");
+    try testing.expectEqualStrings("abcdef", str.slice());
+    try testing.expect(str.isInline());
+}
+
+test "append inline to heap" {
+    var str = try StraleBytes.initSlice(
+        testing.allocator,
+        "0123456789",
+    );
+
+    defer str.deinit();
+    try testing.expect(str.isInline());
+
+    try str.appendAlloc(testing.allocator, "abcdef");
+    try testing.expectEqualStrings("0123456789abcdef", str.slice());
+    try testing.expect(!str.isInline());
+}
+
 test "empty string" {
     var s = StraleBytes.initEmpty();
     defer s.deinit();

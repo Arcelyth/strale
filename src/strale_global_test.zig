@@ -105,3 +105,32 @@ test "global: push heap" {
         s.slice(),
     );
 }
+
+// Append tests
+test "global: append inline" {
+    strale.setGlobalAlloc(testing.allocator);
+    var str = try StraleBytes.initSlice(
+        "abc",
+    );
+
+    defer str.deinit();
+
+    try str.append("def");
+    try testing.expectEqualStrings("abcdef", str.slice());
+    try testing.expect(str.isInline());
+}
+
+test "global: append inline to heap" {
+    strale.setGlobalAlloc(testing.allocator);
+    var str = try StraleBytes.initSlice(
+        "0123456789",
+    );
+
+    defer str.deinit();
+    try testing.expect(str.isInline());
+
+    try str.append("abcdef");
+    try testing.expectEqualStrings("0123456789abcdef", str.slice());
+    try testing.expect(!str.isInline());
+}
+

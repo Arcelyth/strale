@@ -375,7 +375,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             pushByteAlloc;
 
         /// Append a single byte to the string.
-        pub fn pushByteAlloc(self: *Self, alloc: Allocator, char: u8) !void {
+        fn pushByteAlloc(self: *Self, alloc: Allocator, char: u8) !void {
             if (self.isInline()) {
                 const current_len = self.inner.inline_repr.tag_and_len >> 1;
 
@@ -455,7 +455,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         }
 
         /// Append a single UTF-8 codepoint to the string.
-        pub fn pushUtf8Alloc(self: *Self, alloc: Allocator, codepoint: u21) !void {
+        fn pushUtf8Alloc(self: *Self, alloc: Allocator, codepoint: u21) !void {
             var buf: [4]u8 = undefined;
             const n = try std.unicode.utf8Encode(codepoint, &buf);
             const utf8_bytes = buf[0..n];
@@ -904,7 +904,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         else
             appendAlloc;
 
-        pub fn appendAlloc(self: *Self, alloc: Allocator, bytes: []const u8) !void {
+        fn appendAlloc(self: *Self, alloc: Allocator, bytes: []const u8) !void {
             if (bytes.len == 0) return;
 
             if (self.isInline()) {
@@ -998,7 +998,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             };
         }
 
-        pub fn appendGlobal(self: *Self, bytes: []const u8) !void {
+        fn appendGlobal(self: *Self, bytes: []const u8) !void {
             if (bytes.len == 0) return;
 
             if (self.isInline()) {
@@ -1014,7 +1014,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 }
                 const new_capacity = @max(init_capacity, current_len + bytes.len);
                 const total_size = @sizeOf(Header) + new_capacity;
-                const m = try self.getGlobalAlloc().allocWithOptions(
+                const m = try getGlobalAlloc().allocWithOptions(
                     u8,
                     total_size,
                     std.mem.Alignment.of(Header),
@@ -1055,7 +1055,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
 
             // grow / cow
-            const old_alloc = self.getGlobalAlloc();
+            const old_alloc = getGlobalAlloc();
             const old_slice = self.slice();
 
             const needed = current_len + bytes.len;

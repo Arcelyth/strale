@@ -492,7 +492,7 @@ test "append inline to heap" {
     defer str.deinit();
     try testing.expect(str.isInline());
 
-    try str.appendAlloc(testing.allocator, "abcdef");
+    try str.append(testing.allocator, "abcdef");
     try testing.expectEqualStrings("0123456789abcdef", str.slice());
     try testing.expect(!str.isInline());
 }

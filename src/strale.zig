@@ -369,21 +369,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         else
             pushUtf8Alloc;
 
-        fn pushAlloc(
-            self: *Self,
-            alloc: Allocator,
-            char: CharType,
-        ) !void {
-            const f = Self.getFormat();
-            switch (f) {
-                .utf8 => {
-                    try self.pushUtf8Alloc(alloc, @as(u21, @intCast(char)));
-                },
-                .byte => {
-                    try self.pushByteAlloc(alloc, @as(u8, @intCast(char)));
-                },
-            }
-        }
+        const pushAlloc = if (CharType == u21)
+            pushUtf8Alloc
+        else
+            pushByteAlloc;
 
         /// Append a single byte to the string.
         pub fn pushByteAlloc(self: *Self, alloc: Allocator, char: u8) !void {
@@ -548,20 +537,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
         }
 
-        fn pushGlobal(
-            self: *Self,
-            char: CharType,
-        ) !void {
-            const f = Self.getFormat();
-            switch (f) {
-                .utf8 => {
-                    try self.pushUtf8Global(@as(u21, @intCast(char)));
-                },
-                .byte => {
-                    try self.pushByte(@as(u8, @intCast(char)));
-                },
-            }
-        }
+        const pushGlobal = if (CharType == u21)
+            pushUtf8Global
+        else
+            pushByteGlobal;
 
         /// Append a single byte to the string.
         fn pushByteGlobal(self: *Self, char: u8) !void {
@@ -722,13 +701,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
 
         /// Remove the last character from the string and return it and
         /// does not trigger copy-on-write. Return `null` if the string is empty.
-        pub fn pop(self: *Self) ?CharType {
-            const f = Self.getFormat();
-            switch (f) {
-                .utf8 => return self.popUtf8(),
-                .byte => return self.popByte(),
-            }
-        }
+        pub const pop = if (CharType == u21)
+            popUtf8
+        else
+            popByte;
 
         /// Remove the last ascii character from the string and return it.
         pub fn popByte(self: *Self) ?u8 {
@@ -791,13 +767,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
 
         /// Remove the first character from the string and return it and
         /// does not trigger copy-on-write. Return `null` if the string is empty.
-        pub fn popFront(self: *Self) ?CharType {
-            const f = Self.getFormat();
-            switch (f) {
-                .utf8 => return self.popFrontUtf8(),
-                .byte => return self.popFrontByte(),
-            }
-        }
+        pub const popFront = if (CharType == u21)
+            popFrontUtf8
+        else
+            popFrontByte;
 
         /// Remove the first ascii character from the string and return it.
         pub fn popFrontByte(self: *Self) ?u8 {
@@ -860,12 +833,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         }
 
         /// Remove the first `n` characters from the string and does not trigger copy-on-write.
-        pub fn dropFront(self: *Self, n: usize) void {
-            switch (Self.getFormat()) {
-                .byte => self.dropFrontBytes(n),
-                .utf8 => self.dropFrontUtf8(n),
-            }
-        }
+        pub const dropFront = if (CharType == u21)
+            dropFrontUtf8
+        else
+            dropFrontBytes;
 
         /// Remove the first `n` bytes from the string and does not trigger copy-on-write.
         pub fn dropFrontBytes(self: *Self, n: usize) void {
@@ -928,13 +899,10 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         }
 
         /// Get the first character.
-        pub fn peek(self: Self) ?CharType {
-            const f = Self.getFormat();
-            switch (f) {
-                .byte => return self.peekByte(),
-                .utf8 => return self.peekUtf8(),
-            }
-        }
+        pub const peek = if (CharType == u21)
+            peekUtf8
+        else
+            peekByte;
 
         /// Get The first ascii character.
         pub fn peekByte(self: Self) ?u8 {

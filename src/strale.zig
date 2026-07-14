@@ -859,6 +859,74 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             return codepoint;
         }
 
+        /// Remove the first `n` characters from the string and does not trigger copy-on-write.
+        pub fn dropFront(self: *Self, n: usize) void {
+            switch (Self.getFormat()) {
+                .byte => self.dropFrontBytes(n),
+                .utf8 => self.dropFrontUtf8(n),
+            }
+        }
+
+        /// Remove the first `n` bytes from the string and does not trigger copy-on-write.
+        pub fn dropFrontBytes(self: *Self, n: usize) void {
+            if (self.isInline()) {
+                const current_len = self.inner.inline_repr.tag_and_len >> 1;
+                const to_drop = @min(n, current_len);
+                if (to_drop == 0) return;
+
+                @memmove(self.inner.inline_repr.data[0 .. current_len - to_drop], self.inner.inline_repr.data[to_drop..current_len]);
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((current_len - to_drop) << 1)) | 1;
+            } else {
+                const current_len = self.inner.remote_repr.len;
+                const to_drop: u32 = @intCast(@min(n, current_len));
+                if (to_drop == 0) return;
+
+                self.inner.remote_repr.offset += to_drop;
+                self.inner.remote_repr.len -= to_drop;
+
+                const new_len = self.inner.remote_repr.len;
+                if (new_len <= 15) self.remoteToInner(new_len);
+            }
+        }
+
+        /// Remove the first `n` UTF-8 characters from the string and does not
+        /// trigger copy-on-write.
+        pub fn dropFrontUtf8(self: *Self, n: usize) void {
+            if (n == 0) return;
+
+            const src = self.slice();
+            if (src.len == 0) return;
+
+            var bytes_to_drop: usize = 0;
+            var chars_dropped: usize = 0;
+
+            while (bytes_to_drop < src.len and chars_dropped < n) {
+                const cp_len = blk: {
+                    const l = std.unicode.utf8ByteSequenceLength(src[bytes_to_drop]) catch 1;
+                    break :blk @min(l, src.len - bytes_to_drop);
+                };
+
+                bytes_to_drop += cp_len;
+                chars_dropped += 1;
+            }
+
+            if (self.isInline()) {
+                const cur = self.inner.inline_repr.tag_and_len >> 1;
+
+                @memmove(
+                    self.inner.inline_repr.data[0 .. cur - bytes_to_drop],
+                    self.inner.inline_repr.data[bytes_to_drop..cur],
+                );
+
+                self.inner.inline_repr.tag_and_len = @as(u8, @intCast((cur - bytes_to_drop) << 1)) | 1;
+            } else {
+                self.inner.remote_repr.offset += @as(u32, @intCast(bytes_to_drop));
+                self.inner.remote_repr.len -= @as(u32, @intCast(bytes_to_drop));
+
+                if (self.inner.remote_repr.len <= 15) self.remoteToInner(self.inner.remote_repr.len);
+            }
+        }
+
         /// Get the first character.
         pub fn peek(self: Self) ?CharType {
             const f = Self.getFormat();

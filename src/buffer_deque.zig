@@ -96,7 +96,7 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
         }
 
         /// Consume and return the next character from the front of the queue.
-        /// 
+        ///
         /// Return `null` when the entire queue runs out of characters.
         pub fn nextChar(self: *Self) ?CharType {
             while (self.buffer.frontPtr()) |f| {
@@ -117,6 +117,59 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             }
 
             return null;
+        }
+
+        /// Match the given byte sequence against the front of the deque.
+        ///
+        /// If every byte matches, the matched characters are consumed from the deque
+        /// and this function returns `true`.
+        /// If any byte differs or the deque does not contain enough characters,
+        /// the deque remains unchanged and `false` is returned.
+        ///
+        /// Comparison is performed using the supplied equality function.
+        pub fn consume(self: *Self, str: []const u8, eq: *const fn (u8, u8) bool) bool {
+            if (str.len == 0) return true;
+            if (self.buffer.len == 0) return false;
+
+            var buffers_exhausted: usize = 0;
+            var consumed_from_last: usize = 0;
+
+            for (str) |pattern_byte| {
+                if (buffers_exhausted >= self.buffer.len) return false;
+
+                const buf = self.buffer.atPtr(buffers_exhausted);
+                const buf_bytes = buf.slice();
+                if (!eq(buf_bytes[consumed_from_last], pattern_byte)) return false;
+
+                consumed_from_last += 1;
+                if (consumed_from_last >= buf_bytes.len) {
+                    buffers_exhausted += 1;
+                    consumed_from_last = 0;
+                }
+            }
+
+            var i: usize = 0;
+            while (i < buffers_exhausted) : (i += 1) {
+                if (self.buffer.popFront()) |item| {
+                    var tmp = item;
+                    tmp.deinit();
+                }
+            }
+
+            if (consumed_from_last > 0) {
+                if (self.buffer.frontPtr()) |f| {
+                    f.dropFront(consumed_from_last);
+
+                    if (f.isEmpty()) {
+                        if (self.buffer.popFront()) |item| {
+                            var tmp = item;
+                            tmp.deinit();
+                        }
+                    }
+                }
+            }
+
+            return true;
         }
     };
 }

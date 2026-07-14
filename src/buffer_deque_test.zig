@@ -6,6 +6,14 @@ const BufferDeque = @import("buffer_deque.zig").BufferDeque;
 const Buffer = BufferDeque(.byte, .not_atomic, false);
 const Str = strale.Strale(.byte, .not_atomic, false);
 
+fn asciiEq(a: u8, b: u8) bool {
+    return a == b;
+}
+
+fn asciiEqIgnoreCase(a: u8, b: u8) bool {
+    return std.ascii.toLower(a) == std.ascii.toLower(b);
+}
+
 test "pop" {
     const alloc = std.heap.page_allocator;
     var s = try Str.initSlice(alloc, "hello");
@@ -48,3 +56,14 @@ test "buffer peek next char" {
     try testing.expectEqualStrings("ello", f.slice());
 }
 
+test "match exact" {
+    const alloc = std.heap.page_allocator;
+    var deque = try Buffer.init(alloc);
+    defer deque.deinit();
+
+    try deque.pushBackSlice("helloWoRld");
+
+    try testing.expect(deque.consume("hello", asciiEq));
+    try testing.expect(deque.consume("world", asciiEqIgnoreCase));
+    try testing.expect(deque.isEmpty());
+}

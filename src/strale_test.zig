@@ -429,6 +429,46 @@ test "pop front heap" {
     try testing.expectEqual(25, s.len());
 }
 
+// Drop front tests
+test "drop front inline" {
+    var str = try StraleBytes.initSlice(
+        testing.allocator,
+        "hello world",
+    );
+    defer str.deinit();
+
+    str.dropFront(6);
+    try testing.expectEqualStrings("world", str.slice());
+    try testing.expect(str.isInline());
+
+    str.dropFront(5);
+    try testing.expectEqualStrings("", str.slice());
+    try testing.expectEqual(@as(usize, 0), str.slice().len);
+
+    str.dropFront(10);
+    try testing.expectEqualStrings("", str.slice());
+}
+
+test "drop front heap to inline" {
+    const long_str = "abcdefghijklmnopqrstuvwxyz";
+    var str = try StraleBytes.initSlice(
+        testing.allocator,
+        long_str,
+    );
+
+    defer str.deinit();
+
+    try testing.expect(!str.isInline());
+
+    str.dropFront(5);
+    try testing.expectEqualStrings("fghijklmnopqrstuvwxyz", str.slice());
+    try testing.expect(!str.isInline());
+
+    str.dropFront(10);
+    try testing.expectEqualStrings("pqrstuvwxyz", str.slice());
+    try testing.expect(str.isInline());
+}
+
 test "empty string" {
     var s = StraleBytes.initEmpty();
     defer s.deinit();

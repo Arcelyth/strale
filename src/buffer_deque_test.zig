@@ -6,6 +6,9 @@ const BufferDeque = @import("buffer_deque.zig").BufferDeque;
 const Buffer = BufferDeque(.byte, .not_atomic, false);
 const Str = strale.Strale(.byte, .not_atomic, false);
 
+const BufferG = BufferDeque(.byte, .not_atomic, true);
+const StrG = strale.Strale(.byte, .not_atomic, true);
+
 fn asciiEq(a: u8, b: u8) bool {
     return a == b;
 }
@@ -66,4 +69,29 @@ test "match exact" {
     try testing.expect(deque.consume("hello", asciiEq));
     try testing.expect(deque.consume("world", asciiEqIgnoreCase));
     try testing.expect(deque.isEmpty());
+}
+
+test "global: pop" {
+    const alloc = std.heap.page_allocator;
+    strale.setGlobalAlloc(alloc);
+    var s = try StrG.initSlice("hello");
+    defer s.deinit();
+    const s2 = try StrG.initSlice("world");
+
+    var buf = try BufferG.init(alloc);
+    defer buf.deinit();
+    try buf.pushBack(s.clone());
+    // s2 only use once so move to buf
+    try buf.pushBack(s2);
+    try testing.expect(!buf.isEmpty());
+
+    var result = buf.popFront().?;
+    defer result.deinit();
+
+    var result2 = buf.popFront().?;
+    defer result2.deinit();
+
+    try testing.expectEqualStrings("hello", result.slice());
+    try testing.expectEqualStrings("world", result2.slice());
+    try testing.expect(buf.isEmpty());
 }

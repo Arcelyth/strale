@@ -75,15 +75,37 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             try self.buffer.pushBack(self.allocator, item);
         }
 
-        pub fn pushFrontSlice(self: *Self, slice: []const u8) !void {
+        pub const pushFrontSlice = if (use_global_alloc)
+            pushFrontSliceGlobal
+        else
+            pushFrontSliceAlloc;
+
+        pub fn pushFrontSliceAlloc(self: *Self, slice: []const u8) !void {
             if (slice.len == 0) return;
             const s = try T.initSlice(self.allocator, slice);
             try self.buffer.pushFront(self.allocator, s);
         }
 
-        pub fn pushBackSlice(self: *Self, slice: []const u8) !void {
+        pub fn pushFrontSliceGlobal(self: *Self, slice: []const u8) !void {
+            if (slice.len == 0) return;
+            const s = try T.initSlice(slice);
+            try self.buffer.pushFront(self.allocator, s);
+        }
+
+        pub const pushBackSlice = if (use_global_alloc)
+            pushBackSliceGlobal
+        else
+            pushBackSliceAlloc;
+
+        pub fn pushBackSliceAlloc(self: *Self, slice: []const u8) !void {
             if (slice.len == 0) return;
             const s = try T.initSlice(self.allocator, slice);
+            try self.buffer.pushBack(self.allocator, s);
+        }
+
+        pub fn pushBackSliceGlobal(self: *Self, slice: []const u8) !void {
+            if (slice.len == 0) return;
+            const s = try T.initSlice(slice);
             try self.buffer.pushBack(self.allocator, s);
         }
 

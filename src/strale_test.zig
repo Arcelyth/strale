@@ -64,6 +64,14 @@ test "long string" {
     try testing.expectEqualStrings(str, s.slice());
 }
 
+test "init from char" {
+    var s = try StraleBytes.initChar('a');
+    defer s.deinit();
+
+    try testing.expect(s.isInline());
+    try testing.expectEqualStrings("a", s.slice());
+}
+
 test "clone inline string" {
     var s1 = try StraleBytes.initSlice(testing.allocator, "hello");
     defer s1.deinit();

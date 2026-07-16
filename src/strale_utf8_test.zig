@@ -12,6 +12,15 @@ test "basic utf8" {
     try testing.expectEqualStrings("死んだ", s.slice());
 }
 
+test "utf8 init from char" {
+    var s = try StraleUtf8.initChar('好');
+    defer s.deinit();
+
+    try testing.expect(s.isInline());
+    try testing.expectEqualStrings("好", s.slice());
+}
+
+
 test "push utf8" {
     var s = StraleUtf8.initEmpty();
     defer s.deinit();

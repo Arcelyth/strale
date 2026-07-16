@@ -181,6 +181,44 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
         }
 
+        /// Create a string from the given character.
+        pub const initChar = if (CharType == u21)
+            initCharUtf8
+        else
+            initCharByte;
+
+        pub fn initCharByte(char: u8) !Self {
+            return Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = 3, // len=1: (1 << 1) | 1
+                        .data = blk: {
+                            var data: [15]u8 = undefined;
+                            data[0] = char;
+                            break :blk data;
+                        },
+                    },
+                },
+            };
+        }
+
+        pub fn initCharUtf8(char: u21) !Self {
+            var buf: [4]u8 = undefined;
+            const length = try std.unicode.utf8Encode(char, &buf);
+
+            var self = Self{
+                .inner = .{
+                    .inline_repr = .{
+                        .tag_and_len = @as(u8, @intCast((length << 1) | 1)),
+                        .data = undefined,
+                    },
+                },
+            };
+
+            @memcpy(self.inner.inline_repr.data[0..length], buf[0..length]);
+            return self;
+        }
+
         /// Release the resources owned by this string.
         ///
         /// Inline strings require no cleanup.

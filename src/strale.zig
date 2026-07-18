@@ -391,6 +391,30 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             self.* = new_data;
         }
 
+        /// Replace the current string with the given byte slice.
+        pub const set = if (use_global_alloc)
+            setGlobal
+        else
+            setAlloc;
+
+        fn setAlloc(self: *Self, alloc: Allocator, src: []const u8) !void {
+            self.deinit();
+            self.* = try Self.initSlice(alloc, src);
+        }
+
+        fn setGlobal(self: *Self, src: []const u8) !void {
+            self.deinit();
+            self.* = try Self.initSlice(src);
+        }
+
+        /// Take ownership of the string data, leaving an empty string in its place.
+        pub fn take(self: *Self) Self {
+            const old = self.*;
+
+            self.* = Self.initEmpty();
+            return old;
+        }
+
         /// Append a character to the string and its behaviour depends on the format.
         pub const push = if (use_global_alloc)
             pushGlobal

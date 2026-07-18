@@ -262,6 +262,44 @@ test "cow after shared substr" {
     );
 }
 
+test "set" {
+    const allocator = testing.allocator;
+
+    var s = try StraleBytes.initSlice(
+        allocator,
+        "abcdefghijklmnopqrstuvwxyz",
+    );
+    defer s.deinit();
+
+    try s.set(allocator, "world");
+    try testing.expectEqualStrings(
+        "world",
+        s.slice(),
+    );
+}
+
+test "take" {
+    const allocator = testing.allocator;
+
+    var s = try StraleBytes.initSlice(
+        allocator,
+        "hello",
+    );
+    defer s.deinit();
+
+    var moved = s.take();
+    defer moved.deinit();
+    try testing.expectEqualStrings(
+        "hello",
+        moved.slice(),
+    );
+
+    try testing.expectEqualStrings(
+        "",
+        s.slice(),
+    );
+}
+
 // Push tests
 test "push inline" {
     var s = StraleBytes.initEmpty();

@@ -52,6 +52,7 @@ test "buffer peek next char" {
     try testing.expect(!buf.isEmpty());
 
     try testing.expectEqual('h', buf.peekChar());
+    try testing.expectEqual('w', buf.peekCharN(5));
     try testing.expectEqual('h', buf.nextChar());
     var f = buf.popFront().?;
     defer f.deinit();

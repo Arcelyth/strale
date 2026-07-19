@@ -117,6 +117,38 @@ pub fn BufferDeque(comptime format: strale.Format, comptime atomicity: strale.At
             return null;
         }
 
+        /// Return the next N character from the beginning of the queue without consuming it.
+        pub fn peekCharN(self: Self, n: usize) ?CharType {
+            if (self.buffer.len == 0) return null;
+
+            var char_idx: usize = 0;
+            var buf_idx: usize = 0;
+
+            while (buf_idx < self.buffer.len) : (buf_idx += 1) {
+                const buf = self.buffer.atPtr(buf_idx);
+                const bytes = buf.slice();
+
+                var byte_idx: usize = 0;
+                while (byte_idx < bytes.len) {
+                    if (CharType == u8) {
+                        if (char_idx == n) return bytes[byte_idx];
+                        byte_idx += 1;
+                        char_idx += 1;
+                    } else {
+                        const len = std.unicode.utf8ByteSequenceLength(bytes[byte_idx]) catch return null;
+                        if (char_idx == n) {
+                            if (byte_idx + len > bytes.len) return null;
+                            const cp = std.unicode.utf8Decode(bytes[byte_idx .. byte_idx + len]) catch return null;
+                            return @as(u21, @intCast(cp));
+                        }
+                        byte_idx += len;
+                        char_idx += 1;
+                    }
+                }
+            }
+            return null;
+        }
+
         /// Consume and return the next character from the front of the queue.
         ///
         /// Return `null` when the entire queue runs out of characters.

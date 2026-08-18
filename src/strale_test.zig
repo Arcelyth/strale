@@ -681,12 +681,24 @@ test "order ordering" {
     try testing.expectEqual(.lt, a.order(&b));
 }
 
+test "compare" {
+    var a = try StraleBytes.initSlice(testing.allocator, "abc");
+    defer a.deinit();
+
+    var b = try StraleBytes.initSlice(testing.allocator, "aBC");
+    defer b.deinit();
+
+    try testing.expect(!a.cmp(&b));
+    try testing.expect(a.cmpIgnoreCase(&b));
+}
+
 test "equality" {
     var a = try StraleBytes.initSlice(testing.allocator, "abc");
     defer a.deinit();
 
     try testing.expect(a.eql("abc"));
     try testing.expect(!a.eql("abd"));
+    try testing.expect(a.eqlIgnoreCase("aBC"));
 }
 
 test "start with" {

@@ -1296,11 +1296,31 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             return mem.order(u8, self.slice(), other.slice());
         }
 
+        /// Compare Strale to Strale.
         pub fn cmp(self: *const Self, other: *const Self) bool {
             switch (self.order(other)) {
                 .eq => return true,
                 else => return false,
             }
+        }
+
+        /// Compare Strale to Strale case-insensitively.
+        pub fn cmpIgnoreCase(self: *const Self, other: *const Self) bool {
+            if (!self.isInline() and !other.isInline()) {
+                if (self.inner.remote_repr.ptr == other.inner.remote_repr.ptr and
+                    self.inner.remote_repr.offset == other.inner.remote_repr.offset and
+                    self.inner.remote_repr.len == other.inner.remote_repr.len)
+                {
+                    return true;
+                }
+            }
+
+            const a = self.slice();
+            const b = other.slice();
+
+            if (a.len != b.len) return false;
+
+            return eqlIgnoreCaseFast(a, b);
         }
 
         /// Compare Strale to slice.
@@ -1309,6 +1329,15 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
                 .eq => return true,
                 else => return false,
             }
+        }
+
+        /// Compare Strale to slice case-insensitively.
+        pub fn eqlIgnoreCase(self: *const Self, other: []const u8) bool {
+            const a = self.slice();
+
+            if (a.len != other.len) return false;
+
+            return eqlIgnoreCaseFast(a, other);
         }
 
         /// Find the first occurrence of a substring (`needle`) within this string.

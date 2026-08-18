@@ -1906,6 +1906,65 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             };
         }
 
+        fn eqlIgnoreCaseFast(a: []const u8, b: []const u8) bool {
+            const l = a.len;
+            if (l == 0) return true;
+
+            var i: usize = 0;
+
+            // Using SIMD to compare 16 bytes at a time.
+            const vec_len = 16;
+            if (l >= vec_len) {
+                const v_A: @Vector(vec_len, u8) = @splat('A');
+                const v_Z: @Vector(vec_len, u8) = @splat('Z');
+                const v_32: @Vector(vec_len, u8) = @splat(32);
+
+                while (i + vec_len <= l) {
+                    const va: @Vector(vec_len, u8) = a[i .. i + vec_len][0..vec_len].*;
+                    const vb: @Vector(vec_len, u8) = b[i .. i + vec_len][0..vec_len].*;
+
+                    const eq = va == vb;
+                    const diff = va ^ vb;
+                    const upper = va & vb;
+
+                    const diff_is_32 = diff == v_32;
+                    const is_alpha = (upper >= v_A) & (upper <= v_Z);
+                    const valid = eq | (diff_is_32 & is_alpha);
+
+                    if (!@reduce(.And, valid)) return false;
+
+                    i += vec_len;
+                }
+            }
+
+            // Compare any remaining bytes.
+            while (i < l) : (i += 1) {
+                const ca = a[i];
+                const cb = b[i];
+
+                if (ca != cb) {
+                    const diff = ca ^ cb;
+                    if (diff != 32) return false;
+
+                    const upper = ca & cb;
+                    if (upper < 'A' or upper > 'Z') return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// Checks whether the string starts with the given prefix.
+        pub fn startWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
+            const s = self.slice();
+            if (needle.len > s.len) return false;
+            const prefix = s[0..needle.len];
+
+            if (!ignore_case) return std.mem.eql(u8, prefix, needle);
+
+            return eqlIgnoreCaseFast(prefix, needle);
+        }
+
         pub inline fn getFormat() Format {
             const f = format orelse .byte;
             return f;

@@ -689,6 +689,14 @@ test "equality" {
     try testing.expect(!a.eql("abd"));
 }
 
+test "start with" {
+    var a = try StraleBytes.initSlice(testing.allocator, "abcDef");
+    defer a.deinit();
+
+    try testing.expect(a.startWith("abc", false));
+    try testing.expect(a.startWith("abcd", true));
+}
+
 // Find/rind tests
 test "find substring" {
     var s = try StraleBytes.initSlice(testing.allocator, "hello world");

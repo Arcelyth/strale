@@ -1994,6 +1994,18 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             return eqlIgnoreCaseFast(prefix, needle);
         }
 
+        /// Checks whether the string ends with the given prefix.
+        pub fn endWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
+            const s = self.slice();
+            if (needle.len > s.len) return false;
+
+            const suffix = s[s.len - needle.len .. s.len];
+
+            if (!ignore_case) return std.mem.eql(u8, suffix, needle);
+
+            return eqlIgnoreCaseFast(suffix, needle);
+        }
+
         pub inline fn getFormat() Format {
             const f = format orelse .byte;
             return f;

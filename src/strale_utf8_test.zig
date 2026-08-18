@@ -249,4 +249,3 @@ test "start with utf8" {
 
     try testing.expect(a.startWith("咕咕", false));
 }
-

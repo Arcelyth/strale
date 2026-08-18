@@ -701,12 +701,15 @@ test "equality" {
     try testing.expect(a.eqlIgnoreCase("aBC"));
 }
 
-test "start with" {
+test "start/end with" {
     var a = try StraleBytes.initSlice(testing.allocator, "abcDef");
     defer a.deinit();
 
     try testing.expect(a.startWith("abc", false));
     try testing.expect(a.startWith("abcd", true));
+
+    try testing.expect(!a.endWith("def", false));
+    try testing.expect(a.endWith("cdef", true));
 }
 
 // Find/rind tests

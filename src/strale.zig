@@ -1303,6 +1303,14 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
             }
         }
 
+        /// Compare Strale to slice.
+        pub fn eql(self: *const Self, other: []const u8) bool {
+            switch (mem.order(u8, self.slice(), other)) {
+                .eq => return true,                
+                else => return false,
+            }
+        }
+
         /// Find the first occurrence of a substring (`needle`) within this string.
         /// Returns the byte index of the match, or `null` if not found.
         pub fn find(self: *const Self, needle: []const u8) ?usize {

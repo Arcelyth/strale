@@ -681,6 +681,14 @@ test "order ordering" {
     try testing.expectEqual(.lt, a.order(&b));
 }
 
+test "equality" {
+    var a = try StraleBytes.initSlice(testing.allocator, "abc");
+    defer a.deinit();
+
+    try testing.expect(a.eql("abc"));
+    try testing.expect(!a.eql("abd"));
+}
+
 // Find/rind tests
 test "find substring" {
     var s = try StraleBytes.initSlice(testing.allocator, "hello world");

@@ -1306,7 +1306,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         /// Compare Strale to slice.
         pub fn eql(self: *const Self, other: []const u8) bool {
             switch (mem.order(u8, self.slice(), other)) {
-                .eq => return true,                
+                .eq => return true,
                 else => return false,
             }
         }

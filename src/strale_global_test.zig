@@ -133,4 +133,3 @@ test "global: append inline to heap" {
     try testing.expectEqualStrings("0123456789abcdef", str.slice());
     try testing.expect(!str.isInline());
 }
-

@@ -20,7 +20,6 @@ test "utf8 init from char" {
     try testing.expectEqualStrings("好", s.slice());
 }
 
-
 test "push utf8" {
     var s = StraleUtf8.initEmpty();
     defer s.deinit();

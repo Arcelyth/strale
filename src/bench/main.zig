@@ -26,7 +26,6 @@ pub fn main(init: std.process.Init) !void {
     bench = clone_atomic.bench();
     ns = try bench.run(iterations, io);
     printResult("CloneBenchAtomic", iterations, ns);
-
 }
 
 fn printResult(name: []const u8, iterations: u64, elapsed_ns: i96) void {

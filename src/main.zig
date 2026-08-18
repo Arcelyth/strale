@@ -14,7 +14,7 @@ pub const Format = strale.Format;
 pub const Atomicity = strale.Atomicity;
 
 const bd = @import("buffer_deque.zig");
-pub const BufferDeque = bd.BufferDeque; 
+pub const BufferDeque = bd.BufferDeque;
 
 pub const buffer = @import("buffer_deque.zig");
 

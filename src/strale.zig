@@ -1984,7 +1984,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         }
 
         /// Checks whether the string starts with the given prefix.
-        pub fn startWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
+        pub fn startsWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
             const s = self.slice();
             if (needle.len > s.len) return false;
             const prefix = s[0..needle.len];
@@ -1995,7 +1995,7 @@ pub fn Strale(comptime format: ?Format, comptime atomicity: ?Atomicity, comptime
         }
 
         /// Checks whether the string ends with the given prefix.
-        pub fn endWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
+        pub fn endsWith(self: *const Self, needle: []const u8, ignore_case: bool) bool {
             const s = self.slice();
             if (needle.len > s.len) return false;
 

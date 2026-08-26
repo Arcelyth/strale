@@ -247,5 +247,5 @@ test "start with utf8" {
     var a = try StraleUtf8.initSlice(testing.allocator, "咕咕嘎嘎");
     defer a.deinit();
 
-    try testing.expect(a.startWith("咕咕", false));
+    try testing.expect(a.startsWith("咕咕", false));
 }

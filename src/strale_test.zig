@@ -705,11 +705,11 @@ test "start/end with" {
     var a = try StraleBytes.initSlice(testing.allocator, "abcDef");
     defer a.deinit();
 
-    try testing.expect(a.startWith("abc", false));
-    try testing.expect(a.startWith("abcd", true));
+    try testing.expect(a.startsWith("abc", false));
+    try testing.expect(a.startsWith("abcd", true));
 
-    try testing.expect(!a.endWith("def", false));
-    try testing.expect(a.endWith("cdef", true));
+    try testing.expect(!a.endsWith("def", false));
+    try testing.expect(a.endsWith("cdef", true));
 }
 
 // Find/rind tests

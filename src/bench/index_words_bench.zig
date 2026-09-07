@@ -1,4 +1,3 @@
-/// Benchmarks word indexing, compares zig slice with Strale.
 const std = @import("std");
 const strale = @import("strale");
 const Benchmark = @import("Benchmark.zig");
@@ -36,10 +35,23 @@ pub const StringBench = struct {
             if (word.len == 0) continue;
             const key = std.unicode.utf8Decode(word[0..try std.unicode.utf8ByteSequenceLength(word[0])]) catch word[0];
             const owned = try self.allocator.dupe(u8, word);
-            errdefer self.allocator.free(owned);
-            const entry = try index.getOrPut(key);
-            if (!entry.found_existing) entry.value_ptr.* = .empty;
-            try entry.value_ptr.append(self.allocator, owned);
+            const entry = index.getOrPut(key) catch |err| {
+                self.allocator.free(owned);
+                return err;
+            };
+            if (entry.found_existing) {
+                entry.value_ptr.append(self.allocator, owned) catch |err| {
+                    self.allocator.free(owned);
+                    return err;
+                };
+            } else {
+                var values = std.ArrayList([]u8).initCapacity(self.allocator, 1) catch |err| {
+                    self.allocator.free(owned);
+                    return err;
+                };
+                values.appendAssumeCapacity(owned);
+                entry.value_ptr.* = values;
+            }
         }
         return index.count();
     }
@@ -75,21 +87,37 @@ pub const StraleBench = struct {
             index.deinit();
         }
 
-        var words = self.input.splitToStrale(" ");
-        defer words.deinit();
-        while (words.next()) |word_value| {
-            var word = word_value;
-            if (word.isEmpty()) {
-                word.deinit();
+        var input = self.input.clone();
+        defer input.deinit();
+        while (!input.isEmpty()) {
+            const bytes = input.slice();
+            if (bytes[0] == ' ') {
+                const delimiters = std.mem.indexOfNone(u8, bytes, " ") orelse bytes.len;
+                input.dropFrontBytes(delimiters);
                 continue;
             }
+
+            const word_len = std.mem.indexOfScalar(u8, bytes, ' ') orelse bytes.len;
+            var word = input.substr(0, @intCast(word_len));
+            input.dropFrontBytes(word_len);
             const key = word.peek().?;
-            const entry = try index.getOrPut(key);
-            if (!entry.found_existing) entry.value_ptr.* = .empty;
-            entry.value_ptr.append(self.allocator, word) catch |err| {
+            const entry = index.getOrPut(key) catch |err| {
                 word.deinit();
                 return err;
             };
+            if (entry.found_existing) {
+                entry.value_ptr.append(self.allocator, word) catch |err| {
+                    word.deinit();
+                    return err;
+                };
+            } else {
+                var values = std.ArrayList(Str).initCapacity(self.allocator, 1) catch |err| {
+                    word.deinit();
+                    return err;
+                };
+                values.appendAssumeCapacity(word);
+                entry.value_ptr.* = values;
+            }
         }
         return index.count();
     }

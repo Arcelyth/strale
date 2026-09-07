@@ -1,6 +1,7 @@
 const std = @import("std");
 const Benchmark = @import("Benchmark.zig");
 const IndexWords = @import("index_words_bench.zig");
+const Clone = @import("clone_bench.zig");
 
 const small_size = 65_536;
 const large_size = 1 << 20;
@@ -28,13 +29,39 @@ pub fn main(init: std.process.Init) !void {
     //    try runGroup(init.gpa, init.io, "en_1", en_1, iterations);
     //    try runGroup(init.gpa, init.io, "en_2", en_2, iterations);
 
-    try runGroup(init.gpa, init.io, "tendril_en_1", tendril_en_1, iterations);
-    try runGroup(init.gpa, init.io, "tendril_en_2", tendril_en_2, iterations);
-    try runGroup(init.gpa, init.io, "tendril_kr_1", tendril_kr_1, iterations);
-    try runGroup(init.gpa, init.io, "tendril_html_kr_1", tendril_html_kr_1, iterations);
+    try runCompactStrBenches(init.gpa, init.io, iterations);
+    try runIndexWordsBenches(init.gpa, init.io, "tendril_en_1", tendril_en_1, iterations);
+    try runIndexWordsBenches(init.gpa, init.io, "tendril_en_2", tendril_en_2, iterations);
+    try runIndexWordsBenches(init.gpa, init.io, "tendril_kr_1", tendril_kr_1, iterations);
+    try runIndexWordsBenches(init.gpa, init.io, "tendril_html_kr_1", tendril_html_kr_1, iterations);
 }
 
-fn runGroup(
+const compact_str_lengths = [_]usize{ 0, 11, 12, 22, 23, 24, 25, 50 };
+
+fn runCompactStrBenches(allocator: std.mem.Allocator, io: std.Io, iterations: u64) !void {
+    const micro_iterations = std.math.mul(u64, iterations, 10_000) catch std.math.maxInt(u64);
+    var storage: [50]u8 = undefined;
+    @memset(&storage, 'a');
+
+    for (compact_str_lengths) |len| {
+        const input = storage[0..len];
+        var strale_clone = try Clone.StraleClone.init(allocator, input);
+        defer strale_clone.deinit();
+        var string_clone = try Clone.StringClone.init(allocator, input);
+        defer string_clone.deinit();
+
+        const cloning = [_]Benchmark{
+            strale_clone.benchmark("Strale"),
+            string_clone.benchmark("String"),
+        };
+
+        var group_name: [32]u8 = undefined;
+        const cloning_group = try std.fmt.bufPrint(&group_name, "Cloning/{d}", .{len});
+        try runGroup(io, cloning_group, &cloning, micro_iterations, .nanoseconds);
+    }
+}
+
+fn runIndexWordsBenches(
     allocator: std.mem.Allocator,
     io: std.Io,
     group: []const u8,
@@ -56,13 +83,27 @@ fn runGroup(
         large_string.benchmark("index_words_big_string"),
         large_strale.benchmark("index_words_big_strale"),
     };
-    for (benches) |bench| {
-        const elapsed = try bench.run(iterations, io);
-        printResult(group, bench.name, iterations, elapsed);
-    }
+    try runGroup(io, group, &benches, iterations, .microseconds);
 }
 
-fn printResult(group: []const u8, name: []const u8, iterations: u64, elapsed: i96) void {
-    const ns_per_op = @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(iterations));
-    std.debug.print("{s}/{s}\n    time: {d:.2} us\n", .{ group, name, ns_per_op / 1_000.0 });
+const TimeUnit = enum {
+    nanoseconds,
+    microseconds,
+};
+
+fn runGroup(
+    io: std.Io,
+    group: []const u8,
+    benches: []const Benchmark,
+    iterations: u64,
+    unit: TimeUnit,
+) !void {
+    for (benches) |bench| {
+        const elapsed = try bench.run(iterations, io);
+        const ns_per_op = @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(iterations));
+        switch (unit) {
+            .nanoseconds => std.debug.print("{s}/{s}\n    time: {d:.2} ns\n", .{ group, bench.name, ns_per_op }),
+            .microseconds => std.debug.print("{s}/{s}\n    time: {d:.2} us\n", .{ group, bench.name, ns_per_op / 1_000.0 }),
+        }
+    }
 }

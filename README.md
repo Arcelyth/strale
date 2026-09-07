@@ -76,6 +76,12 @@ pub fn main() !void {
 }
 ```
 
+## Running benchmarks
+
+```shell
+zig build bench -- [iterations]
+```
+
 ## LICENSE
 
 MIT License

@@ -1,3 +1,4 @@
+/// Type-erased benchmark interface.
 const std = @import("std");
 const Benchmark = @This();
 

@@ -1,3 +1,4 @@
+/// Benchmarks word indexing, compares zig slice with Strale.
 const std = @import("std");
 const strale = @import("strale");
 const Benchmark = @import("Benchmark.zig");

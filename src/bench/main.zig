@@ -2,6 +2,7 @@ const std = @import("std");
 const Benchmark = @import("Benchmark.zig");
 const IndexWords = @import("index_words_bench.zig");
 const Clone = @import("clone_bench.zig");
+const Creation = @import("creation_bench.zig");
 
 const small_size = 65_536;
 const large_size = 1 << 20;
@@ -45,17 +46,27 @@ fn runCompactStrBenches(allocator: std.mem.Allocator, io: std.Io, iterations: u6
 
     for (compact_str_lengths) |len| {
         const input = storage[0..len];
+        var strale_creation = Creation.StraleCreation{ .allocator = allocator, .input = input };
+        var string_creation = Creation.StringCreation{ .allocator = allocator, .input = input };
         var strale_clone = try Clone.StraleClone.init(allocator, input);
         defer strale_clone.deinit();
         var string_clone = try Clone.StringClone.init(allocator, input);
         defer string_clone.deinit();
 
+        const creation = [_]Benchmark{
+            strale_creation.benchmark("Strale"),
+            string_creation.benchmark("String"),
+        };
         const cloning = [_]Benchmark{
             strale_clone.benchmark("Strale"),
             string_clone.benchmark("String"),
         };
 
         var group_name: [32]u8 = undefined;
+
+        const creation_group = try std.fmt.bufPrint(&group_name, "Creation/{d}", .{len});
+        try runGroup(io, creation_group, &creation, micro_iterations, .nanoseconds);
+
         const cloning_group = try std.fmt.bufPrint(&group_name, "Cloning/{d}", .{len});
         try runGroup(io, cloning_group, &cloning, micro_iterations, .nanoseconds);
     }
@@ -98,12 +109,13 @@ fn runGroup(
     iterations: u64,
     unit: TimeUnit,
 ) !void {
+    std.debug.print("===== {s} =====\n", .{group});
     for (benches) |bench| {
         const elapsed = try bench.run(iterations, io);
         const ns_per_op = @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(iterations));
         switch (unit) {
-            .nanoseconds => std.debug.print("{s}/{s}\n    time: {d:.2} ns\n", .{ group, bench.name, ns_per_op }),
-            .microseconds => std.debug.print("{s}/{s}\n    time: {d:.2} us\n", .{ group, bench.name, ns_per_op / 1_000.0 }),
+            .nanoseconds => std.debug.print("{s}\n    time: {d:.2} ns\n", .{ bench.name, ns_per_op }),
+            .microseconds => std.debug.print("{s}\n    time: {d:.2} us\n", .{ bench.name, ns_per_op / 1_000.0 }),
         }
     }
 }

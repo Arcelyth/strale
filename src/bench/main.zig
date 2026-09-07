@@ -3,6 +3,7 @@ const Benchmark = @import("Benchmark.zig");
 const IndexWords = @import("index_words_bench.zig");
 const Clone = @import("clone_bench.zig");
 const Creation = @import("creation_bench.zig");
+const Access = @import("access_bench.zig");
 
 const small_size = 65_536;
 const large_size = 1 << 20;
@@ -52,6 +53,10 @@ fn runCompactStrBenches(allocator: std.mem.Allocator, io: std.Io, iterations: u6
         defer strale_clone.deinit();
         var string_clone = try Clone.StringClone.init(allocator, input);
         defer string_clone.deinit();
+        var strale_access = try Access.StraleAccess.init(allocator, input);
+        defer strale_access.deinit();
+        var string_access = try Access.StringAccess.init(allocator, input);
+        defer string_access.deinit();
 
         const creation = [_]Benchmark{
             strale_creation.benchmark("Strale"),
@@ -61,6 +66,10 @@ fn runCompactStrBenches(allocator: std.mem.Allocator, io: std.Io, iterations: u6
             strale_clone.benchmark("Strale"),
             string_clone.benchmark("String"),
         };
+        const access = [_]Benchmark{
+            strale_access.benchmark("Strale"),
+            string_access.benchmark("String"),
+        };
 
         var group_name: [32]u8 = undefined;
 
@@ -69,6 +78,9 @@ fn runCompactStrBenches(allocator: std.mem.Allocator, io: std.Io, iterations: u6
 
         const cloning_group = try std.fmt.bufPrint(&group_name, "Cloning/{d}", .{len});
         try runGroup(io, cloning_group, &cloning, micro_iterations, .nanoseconds);
+
+        const access_group = try std.fmt.bufPrint(&group_name, "Access/{d}", .{len});
+        try runGroup(io, access_group, &access, micro_iterations, .nanoseconds);
     }
 }
 
